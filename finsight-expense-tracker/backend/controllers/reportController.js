@@ -10,24 +10,33 @@ const getCategoryReport = async (req, res) => {
     try {
         // Build date filter
         const dateFilter = { userId: req.user.id };
-        if (req.query.dateFrom || req.query.dateTo) {
+        const { dateFrom, dateTo, timeRange } = req.query;
+
+        if (dateFrom || dateTo) {
             dateFilter.date = {};
-            if (req.query.dateFrom) dateFilter.date[Op.gte] = new Date(req.query.dateFrom);
-            if (req.query.dateTo) {
-                const end = new Date(req.query.dateTo);
+            if (dateFrom) dateFilter.date[Op.gte] = new Date(dateFrom);
+            if (dateTo) {
+                const end = new Date(dateTo);
                 end.setHours(23, 59, 59, 999);
                 dateFilter.date[Op.lte] = end;
             }
+        } else if (timeRange && timeRange !== 'all') {
+            const now = new Date();
+            let fromDate = new Date();
+            if (timeRange === '7d') fromDate.setDate(now.getDate() - 7);
+            else if (timeRange === '30d') fromDate.setDate(now.getDate() - 30);
+            else if (timeRange === '90d') fromDate.setDate(now.getDate() - 90);
+            else if (timeRange === '1y') fromDate.setFullYear(now.getFullYear() - 1);
+            dateFilter.date = { [Op.gte]: fromDate };
         }
 
         const report = await Expense.findAll({
             where: dateFilter,
             attributes: [
                 ['category', '_id'],
-                [fn('SUM', col('amount')), 'total'],
-                'currency'
+                [fn('SUM', col('amount')), 'total']
             ],
-            group: ['category', 'currency']
+            group: ['category']
         });
 
         // Get user for preferred currency
@@ -41,10 +50,8 @@ const getCategoryReport = async (req, res) => {
         for (const item of report) {
             const category = item.getDataValue('_id');
             const amount = parseFloat(item.getDataValue('total'));
-            const fromCurrency = item.getDataValue('currency') || 'USD';
-
-            const converted = await convertCurrency(amount, fromCurrency, targetCurrency);
-
+            // Convert to user's preferred currency
+            const converted = await convertCurrency(amount, 'USD', targetCurrency);
             if (!processedReport[category]) {
                 processedReport[category] = 0;
             }
@@ -54,12 +61,12 @@ const getCategoryReport = async (req, res) => {
 
         const finalReport = Object.keys(processedReport).map(key => ({
             _id: key,
-            total: processedReport[key].toFixed(2)
+            total: parseFloat(processedReport[key].toFixed(2))
         }));
 
         res.json({
             report: finalReport,
-            grandTotal: grandTotal.toFixed(2),
+            grandTotal: parseFloat(grandTotal.toFixed(2)),
             currency: targetCurrency
         });
 
@@ -80,9 +87,10 @@ const getMonthlyReport = async (req, res) => {
             groupBy = fn('strftime', '%m', col('date'));
             orderBy = fn('strftime', '%m', col('date'));
         } else if (dialect === 'postgres') {
-            monthAttr = [fn('to_char', col('date'), 'Month'), 'month'];
-            groupBy = fn('to_char', col('date'), 'Month');
-            orderBy = fn('extract', sequelize.literal('MONTH FROM date'));
+            // Trim whitespace from to_char output in Postgres
+            monthAttr = [fn('trim', fn('to_char', col('date'), 'Month')), 'month'];
+            groupBy = [fn('to_char', col('date'), 'Month'), sequelize.literal("EXTRACT(MONTH FROM date)")];
+            orderBy = [sequelize.literal("EXTRACT(MONTH FROM date)"), 'ASC'];
         } else {
             // Default to MySQL
             monthAttr = [fn('MONTHNAME', col('date')), 'month'];
@@ -92,15 +100,27 @@ const getMonthlyReport = async (req, res) => {
 
         // Build date filter
         const dateFilter = { userId: req.user.id };
-        if (req.query.dateFrom || req.query.dateTo) {
+        const { dateFrom, dateTo, timeRange } = req.query;
+
+        if (dateFrom || dateTo) {
             dateFilter.date = {};
-            if (req.query.dateFrom) dateFilter.date[Op.gte] = new Date(req.query.dateFrom);
-            if (req.query.dateTo) {
-                const end = new Date(req.query.dateTo);
+            if (dateFrom) dateFilter.date[Op.gte] = new Date(dateFrom);
+            if (dateTo) {
+                const end = new Date(dateTo);
                 end.setHours(23, 59, 59, 999);
                 dateFilter.date[Op.lte] = end;
             }
+        } else if (timeRange && timeRange !== 'all') {
+            const now = new Date();
+            let fromDate = new Date();
+            if (timeRange === '7d') fromDate.setDate(now.getDate() - 7);
+            else if (timeRange === '30d') fromDate.setDate(now.getDate() - 30);
+            else if (timeRange === '90d') fromDate.setDate(now.getDate() - 90);
+            else if (timeRange === '1y') fromDate.setFullYear(now.getFullYear() - 1);
+            dateFilter.date = { [Op.gte]: fromDate };
         }
+
+        const isLiteralOrder = Array.isArray(orderBy);
 
         const report = await Expense.findAll({
             where: dateFilter,
@@ -108,11 +128,16 @@ const getMonthlyReport = async (req, res) => {
                 monthAttr,
                 [fn('SUM', col('amount')), 'total']
             ],
-            group: [groupBy],
-            order: [[orderBy, 'ASC']]
+            group: Array.isArray(groupBy) ? groupBy : [groupBy],
+            order: isLiteralOrder ? [orderBy] : [[orderBy, 'ASC']]
         });
 
-        res.json(report);
+        const finalReport = report.map(item => ({
+            month: item.getDataValue('month'),
+            total: parseFloat(parseFloat(item.getDataValue('total') || 0).toFixed(2))
+        }));
+
+        res.json(finalReport);
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
@@ -124,29 +149,138 @@ const getAdminSummary = async (req, res) => {
             return res.status(403).json({ message: 'Not authorized as admin' });
         }
 
-        const totalCompanySpend = await Expense.sum('amount', { where: { status: 'approved' } }) || 0;
-        const pendingCount = await Expense.count({ where: { status: 'pending' } });
-        const companyCategoryData = await Expense.findAll({
+        // Date filter
+        const dateFilter = { organizationId: req.user.organizationId };
+        const { dateFrom, dateTo, timeRange } = req.query;
+
+        if (dateFrom || dateTo) {
+            dateFilter.date = {};
+            if (dateFrom) dateFilter.date[Op.gte] = new Date(dateFrom);
+            if (dateTo) {
+                const end = new Date(dateTo);
+                end.setHours(23, 59, 59, 999);
+                dateFilter.date[Op.lte] = end;
+            }
+        } else if (timeRange && timeRange !== 'all') {
+            const now = new Date();
+            let fromDate = new Date();
+            if (timeRange === '7d') fromDate.setDate(now.getDate() - 7);
+            else if (timeRange === '30d') fromDate.setDate(now.getDate() - 30);
+            else if (timeRange === '90d') fromDate.setDate(now.getDate() - 90);
+            else if (timeRange === '1y') fromDate.setFullYear(now.getFullYear() - 1);
+            dateFilter.date = { [Op.gte]: fromDate };
+        }
+
+        const totalCompanySpend = await Expense.sum('amount', { 
+            where: { 
+                ...dateFilter,
+                status: 'approved' 
+            } 
+        }) || 0;
+        
+        const pendingCount = await Expense.count({ 
+            where: { 
+                ...dateFilter,
+                status: 'pending' 
+            } 
+        });
+
+        // Top Spenders
+        const topSpendersRaw = await Expense.findAll({
+            where: { ...dateFilter, status: 'approved' },
+            attributes: [
+                'userId',
+                [fn('SUM', col('amount')), 'totalSpent']
+            ],
+            include: [{ model: User, attributes: ['name'] }],
+            group: ['userId', 'User.id'],
+            order: [[fn('SUM', col('amount')), 'DESC']],
+            limit: 5
+        });
+        const topSpenders = topSpendersRaw.map(s => ({
+            name: s.User?.name || 'Unknown',
+            total: parseFloat(parseFloat(s.getDataValue('totalSpent') || 0).toFixed(2))
+        }));
+
+        // Enterprise Stats
+        const Project = require('../models/Project');
+        const Vendor = require('../models/Vendor');
+        const Asset = require('../models/Asset');
+        const enterpriseStats = {
+            projects: await Project.count({ where: { organizationId: req.user.organizationId } }),
+            vendors: await Vendor.count({ where: { organizationId: req.user.organizationId } }),
+            assets: await Asset.count({ where: { organizationId: req.user.organizationId } })
+        };
+
+        // Company categories
+        const companyCategoryRaw = await Expense.findAll({
+            where: dateFilter,
             attributes: [
                 ['category', '_id'],
                 [fn('SUM', col('amount')), 'total']
             ],
             group: ['category']
         });
+        const companyCategoryData = companyCategoryRaw.map(item => ({
+            _id: item.getDataValue('_id'),
+            total: parseFloat(parseFloat(item.getDataValue('total') || 0).toFixed(2))
+        }));
+
+        // Company monthly trend
+        const dialect = sequelize.getDialect();
+        let monthAttr, groupBy, orderBy;
+        if (dialect === 'postgres') {
+            monthAttr = [fn('trim', fn('to_char', col('date'), 'Month')), 'month'];
+            groupBy = [fn('to_char', col('date'), 'Month'), sequelize.literal("EXTRACT(MONTH FROM date)")];
+            orderBy = [sequelize.literal("EXTRACT(MONTH FROM date)"), 'ASC'];
+        } else {
+            monthAttr = [fn('MONTHNAME', col('date')), 'month'];
+            groupBy = fn('MONTHNAME', col('date'));
+            orderBy = fn('MONTH', col('date'));
+        }
+
+        const companyMonthlyRaw = await Expense.findAll({
+            where: dateFilter,
+            attributes: [
+                monthAttr,
+                [fn('SUM', col('amount')), 'total']
+            ],
+            group: Array.isArray(groupBy) ? groupBy : [groupBy],
+            order: Array.isArray(orderBy) ? [orderBy] : [[orderBy, 'ASC']]
+        });
+        const companyMonthlyData = companyMonthlyRaw.map(item => ({
+            month: item.getDataValue('month'),
+            total: parseFloat(parseFloat(item.getDataValue('total') || 0).toFixed(2))
+        }));
 
         res.json({
-            totalCompanySpend,
+            totalCompanySpend: parseFloat(parseFloat(totalCompanySpend).toFixed(2)),
             pendingCount,
-            companyCategoryData
+            topSpenders,
+            enterpriseStats,
+            companyCategoryData,
+            companyMonthlyData
         });
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
-}
+};
 const exportExpenses = async (req, res) => {
     try {
+        const { dateFrom, dateTo } = req.query;
+        let expenseFilter = { userId: req.user.id };
+        if (dateFrom || dateTo) {
+            expenseFilter.date = {};
+            if (dateFrom) expenseFilter.date[Op.gte] = new Date(dateFrom);
+            if (dateTo) {
+                const end = new Date(dateTo);
+                end.setHours(23, 59, 59, 999);
+                expenseFilter.date[Op.lte] = end;
+            }
+        }
+
         const expenses = await Expense.findAll({
-            where: { userId: req.user.id },
+            where: expenseFilter,
             order: [['date', 'DESC']]
         });
         const csvHeader = 'Date,Title,Category,Amount,Currency,Status\n';
@@ -163,42 +297,63 @@ const exportExpenses = async (req, res) => {
 };
 
 const getBudgetComparison = async (req, res) => {
-    try {
-        const budgets = await Budget.findAll({ where: { userId: req.user.id } });
+  try {
+    // Fetch budgets for the user's organization (or all if none)
+    const budgetWhere = req.user.organizationId ? { organizationId: req.user.organizationId } : {};
+    const budgets = await Budget.findAll({ where: budgetWhere });
 
-        const startOfMonth = new Date();
-        startOfMonth.setDate(1);
-        startOfMonth.setHours(0, 0, 0, 0);
+    // Start of the current month
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
 
-        const spending = await Expense.findAll({
-            where: {
-                userId: req.user.id,
-                date: { [Op.gte]: startOfMonth },
-                status: { [Op.ne]: 'rejected' }
-            },
-            attributes: [
-                ['category', '_id'],
-                [fn('SUM', col('amount')), 'total']
-            ],
-            group: ['category']
-        });
+    // Spending per category for the current month (exclude rejected)
+    const spending = await Expense.findAll({
+      where: {
+        userId: req.user.id,
+        date: { [Op.gte]: startOfMonth },
+        status: { [Op.ne]: 'rejected' }
+      },
+      attributes: [
+        ['category', '_id'],
+        [fn('SUM', col('amount')), 'total']
+      ],
+      group: ['category']
+    });
 
-        const spendingMap = {};
-        spending.forEach(s => {
-            spendingMap[s.getDataValue('_id')] = parseFloat(s.getDataValue('total'));
-        });
+    // Map of spending amounts by category
+    const spendingMap = {};
+    spending.forEach(s => {
+      spendingMap[s.getDataValue('_id')] = parseFloat(s.getDataValue('total'));
+    });
 
-        const comparison = budgets.map(b => ({
-            category: b.category,
-            budgetAmount: parseFloat(b.amount),
-            actualSpent: spendingMap[b.category] || 0,
-            percentage: ((spendingMap[b.category] || 0) / parseFloat(b.amount) * 100).toFixed(1)
-        }));
+    // Ensure every expense category has a budget entry (use placeholder if missing)
+    const expenseCategories = Object.keys(spendingMap);
+    const budgetMap = new Map(budgets.map(b => [b.category, b]));
+    const allBudgets = [...budgets];
+    expenseCategories.forEach(cat => {
+      if (!budgetMap.has(cat)) {
+        allBudgets.push({ category: cat, amount: 0 });
+      }
+    });
 
-        res.json(comparison);
-    } catch (error) {
-        res.status(500).json({ message: error.message });
-    }
+    // Build comparison array
+    const comparison = allBudgets.map(b => {
+      const budgetAmt = parseFloat(b.amount);
+      const spent = spendingMap[b.category] || 0;
+      const percentage = budgetAmt > 0 ? ((spent / budgetAmt) * 100).toFixed(1) : '0';
+      return {
+        category: b.category,
+        budgetAmount: budgetAmt,
+        actualSpent: spent,
+        percentage
+      };
+    });
+
+    res.json(comparison);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
 
 module.exports = { getCategoryReport, getMonthlyReport, getAdminSummary, exportExpenses, getBudgetComparison };

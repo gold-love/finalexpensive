@@ -1,27 +1,30 @@
 import React, { useContext } from 'react';
 import { NavLink } from 'react-router-dom';
 import AuthContext from '../context/AuthContext';
+import { getTranslation } from '../utils/i18n';
 
 const Sidebar = ({ onClose }) => {
     const { user } = useContext(AuthContext);
 
     const navItems = [
-        { path: '/', label: 'Dashboard', icon: '📊' },
+        { path: '/', label: getTranslation(user?.language, 'dashboard'), icon: '📊' },
         ...(user?.orgSettings?.expenseModuleEnabled !== false ? [
-            { path: '/add-expense', label: 'Add Expense', icon: '➕' },
-            { path: '/expenses', label: 'My Expenses', icon: '💸' }
+            { path: '/add-expense', label: getTranslation(user?.language, 'add_expense'), icon: '➕' },
+            { path: '/expenses', label: getTranslation(user?.language, 'my_expenses'), icon: '💸' }
         ] : []),
         ...(user?.orgSettings?.budgetModuleEnabled !== false ? [
-            { path: '/budgets', label: 'Budgets', icon: '📈' }
+            { path: '/budgets', label: getTranslation(user?.language, 'budgets'), icon: '📈' }
         ] : []),
-        { path: '/reports', label: 'Reports', icon: '📋' },
-        { path: '/settings', label: 'Settings', icon: '⚙️' },
+        { path: '/reports', label: getTranslation(user?.language, 'reports'), icon: '📋' },
+        { path: '/settings', label: getTranslation(user?.language, 'settings'), icon: '⚙️' },
     ];
 
-    // Admin-only link
+    // Admin-only links
     if (user?.role === 'admin') {
-        navItems.splice(4, 0, { path: '/approvals', label: 'Approvals', icon: '✅' });
-        navItems.splice(6, 0, { path: '/users', label: 'Users', icon: '👥' });
+        navItems.splice(4, 0, { path: '/approvals', label: getTranslation(user?.language, 'approvals'), icon: '✅' });
+        navItems.splice(6, 0, { path: '/users', label: getTranslation(user?.language, 'users'), icon: '👥' });
+        navItems.splice(7, 0, { path: '/enterprise', label: getTranslation(user?.language, 'enterprise'), icon: '🏢' });
+        navItems.splice(8, 0, { path: '/audit-logs', label: getTranslation(user?.language, 'audit_logs'), icon: '📋' });
     }
 
 
@@ -58,7 +61,7 @@ const Sidebar = ({ onClose }) => {
             </nav>
 
             <div style={{ marginTop: 'auto', padding: '20px 16px', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-                <p style={{ color: 'var(--gray)', fontSize: '12px' }}>Logged in as</p>
+                <p style={{ color: 'var(--gray)', fontSize: '12px' }}>{getTranslation(user?.language, 'logged_in_as')}</p>
                 <p style={{ color: 'white', fontWeight: '600' }}>{user?.name}</p>
                 <p style={{ color: 'var(--primary)', fontSize: '12px', textTransform: 'capitalize' }}>{user?.role || 'employee'}</p>
             </div>

@@ -17,9 +17,10 @@ export const ToastProvider = ({ children }) => {
     const success = (message) => addToast(message, 'success');
     const error = (message) => addToast(message, 'error');
     const warning = (message) => addToast(message, 'warning');
+    const info = (message) => addToast(message, 'info');
 
     return (
-        <ToastContext.Provider value={{ addToast, success, error, warning }}>
+        <ToastContext.Provider value={{ addToast, success, error, warning, info }}>
             {children}
             <div className="toast-container">
                 {toasts.map(toast => (

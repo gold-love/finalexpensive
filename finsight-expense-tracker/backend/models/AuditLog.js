@@ -13,7 +13,7 @@ const AuditLog = sequelize.define('AuditLog', {
     },
     organizationId: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true, // FIX: Must be nullable — some users may not belong to an org
     },
     action: {
         type: DataTypes.STRING,

@@ -152,7 +152,13 @@ const getAllExpenses = async (req, res) => {
             return res.status(403).json({ message: 'Not authorized as admin' });
         }
 
+        const whereClause = { organizationId: req.user.organizationId };
+        if (req.query.status && req.query.status !== 'all') {
+            whereClause.status = req.query.status;
+        }
+
         const expenses = await Expense.findAll({
+            where: whereClause,
             include: [{ model: User, attributes: ['id', 'name', 'email'] }],
             order: [['createdAt', 'DESC']],
         });
@@ -244,6 +250,53 @@ const rejectBudget = async (req, res) => {
     }
 };
 
+// @desc    Bulk action on expenses
+// @route   PUT /api/approvals/bulk
+// @access  Private/Admin
+const bulkExpenseAction = async (req, res) => {
+    const { ids, action, reason } = req.body;
+    
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: 'No expense IDs provided' });
+    }
+
+    try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Not authorized as admin' });
+        }
+
+        const status = action === 'approve' ? 'approved' : 'rejected';
+        const updateData = { status };
+        if (action === 'reject') {
+            updateData.rejectionReason = reason || 'Bulk rejected';
+        }
+
+        const [updatedCount] = await Expense.update(updateData, {
+            where: {
+                id: { [Op.in]: ids },
+                organizationId: req.user.organizationId,
+                status: 'pending' // Only update pending ones
+            }
+        });
+
+        // Audit Log
+        await logAudit({
+            req,
+            action: action === 'approve' ? 'BULK_APPROVE' : 'BULK_REJECT',
+            targetType: 'Expense',
+            details: { count: updatedCount, ids }
+        });
+
+        res.json({ 
+            success: true, 
+            message: `Successfully ${status} ${updatedCount} expenses.`,
+            count: updatedCount
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
 module.exports = {
     getPendingExpenses,
     approveExpense,
@@ -251,5 +304,6 @@ module.exports = {
     getAllExpenses,
     getPendingBudgets,
     approveBudget,
-    rejectBudget
+    rejectBudget,
+    bulkExpenseAction
 };

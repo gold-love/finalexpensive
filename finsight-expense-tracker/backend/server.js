@@ -33,14 +33,18 @@ app.use(express.urlencoded({ extended: false }));
 // Rate Limiting
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 100,
+    max: 1000, // Increased for development and heavy polling
     message: { message: 'Too many requests, please try again after 15 minutes' }
 });
-app.use('/api/', limiter);
+app.use(limiter);
 
 // Request Logger
 app.use((req, res, next) => {
-    logger.info(`${req.method} ${req.url}`);
+    const start = Date.now();
+    res.on('finish', () => {
+        const duration = Date.now() - start;
+        logger.info(`${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`);
+    });
     next();
 });
 
@@ -58,9 +62,12 @@ app.use('/api/expenses', require('./routes/expenseRoutes'));
 app.use('/api/budgets', require('./routes/budgetRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
 app.use('/api/approvals', require('./routes/approvalRoutes'));
+app.use('/api/plaid', require('./routes/plaidRoutes'));
 app.use('/api/settings', require('./routes/settingsRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/enterprise', require('./routes/enterpriseRoutes'));
+app.use('/api/newsletter', require('./routes/newsletterRoutes'));
+app.use('/api/feedback', require('./routes/feedbackRoutes'));
 
 // Error Handling
 app.use(notFound);

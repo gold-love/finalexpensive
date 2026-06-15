@@ -21,4 +21,26 @@ const getAuditLogs = async (req, res) => {
     }
 };
 
-module.exports = { getAuditLogs };
+// @desc    Get personal security logs
+// @route   GET /api/settings/security-logs
+// @access  Private
+const getMySecurityLogs = async (req, res) => {
+    try {
+        const { Op } = require('sequelize');
+        const logs = await AuditLog.findAll({
+            where: {
+                userId: req.user.id,
+                action: {
+                    [Op.in]: ['Login', 'Login Failed', 'Password Change', 'Enable 2FA', 'Disable 2FA', 'Session Revocation']
+                }
+            },
+            order: [['createdAt', 'DESC']],
+            limit: 20
+        });
+        res.json(logs);
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+module.exports = { getAuditLogs, getMySecurityLogs };

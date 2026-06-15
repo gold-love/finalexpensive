@@ -40,10 +40,19 @@ body {
   line-height: 1.5;
 }
 
+/* App wrapper */
+.app-wrapper {
+  position: relative;
+  min-height: 100vh;
+  z-index: 0;
+}
+
 /* Layout */
 .layout {
   display: flex;
   min-height: 100vh;
+  position: relative;
+  z-index: 1;
 }
 
 .sidebar {
@@ -244,9 +253,16 @@ h2 {
 }
 
 /* Table */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 table {
   width: 100%;
   border-spacing: 0;
+  min-width: 600px; /* Ensure table doesn't crush too small */
 }
 
 th {
@@ -487,6 +503,10 @@ tr:hover td {
   background: var(--accent);
 }
 
+.toast.info {
+  background: #3b82f6; /* Blue for informational alerts */
+}
+
 @keyframes slideIn {
   from {
     transform: translateX(100%);
@@ -499,13 +519,34 @@ tr:hover td {
   }
 }
 
+/* Tablet Responsive */
+@media (max-width: 1024px) {
+  .stats-grid {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+  }
+
+  .main-content {
+    padding: 24px;
+  }
+
+  .card {
+    padding: 20px;
+  }
+}
+
 /* Mobile Responsive */
 @media (max-width: 768px) {
+  .layout {
+    flex-direction: column;
+  }
+
   .sidebar {
     position: fixed;
     left: -280px;
     z-index: 200;
     height: 100vh;
+    box-shadow: var(--shadow-lg);
   }
 
   .sidebar.open {
@@ -515,10 +556,15 @@ tr:hover td {
   .main-content {
     padding: 16px;
     margin-left: 0;
+    width: 100%;
+    overflow-x: hidden;
   }
 
   .navbar {
     padding: 0 16px;
+    flex-wrap: wrap;
+    height: auto;
+    min-height: 72px;
   }
 
   .stats-grid {
@@ -532,10 +578,48 @@ tr:hover td {
     font-size: 24px;
     cursor: pointer;
     color: var(--dark);
+    padding: 8px;
+  }
+
+  [data-theme="dark"] .hamburger {
+    color: var(--white);
   }
 
   h2 {
     font-size: 1.5rem;
+    margin-bottom: 16px;
+  }
+
+  .card {
+    padding: 16px;
+  }
+
+  /* Make forms fully stacked on mobile */
+  .form-group {
+    margin-bottom: 16px;
+  }
+
+  .btn {
+    width: 100%;
+    justify-content: center;
+    padding: 14px 24px;
+  }
+
+  /* Adjust charts container for mobile */
+  .chart-container {
+    height: 250px !important;
+  }
+}
+
+/* Very Small Devices */
+@media (max-width: 480px) {
+  .navbar {
+    flex-direction: row;
+    justify-content: space-between;
+  }
+
+  h2 {
+    font-size: 1.25rem;
   }
 }
 
@@ -572,4 +656,10 @@ tr:hover td {
     padding: 0;
     margin: 0;
   }
+}
+
+.footer-link:hover {
+  color: var(--primary) !important;
+  padding-left: 8px;
+  opacity: 1 !important;
 }

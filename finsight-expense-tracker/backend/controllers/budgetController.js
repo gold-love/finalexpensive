@@ -56,9 +56,16 @@ const deleteBudget = async (req, res) => {
         const budget = await Budget.findByPk(req.params.id);
 
         if (budget) {
-            if (budget.userId !== req.user.id) {
-                return res.status(401).json({ message: 'Not authorized' });
+            // Restriction: Only Admins can delete budgets
+            if (req.user.role !== 'admin') {
+                return res.status(403).json({ message: 'Only administrators can delete budgets' });
             }
+            
+            // Still check if it belongs to their organization
+            if (budget.organizationId !== req.user.organizationId) {
+                return res.status(401).json({ message: 'Not authorized for this organization' });
+            }
+            
             await budget.destroy();
             res.json({ message: 'Budget removed' });
         } else {
@@ -79,8 +86,14 @@ const updateBudget = async (req, res) => {
             return res.status(404).json({ message: 'Budget not found' });
         }
 
-        if (budget.userId !== req.user.id) {
-            return res.status(401).json({ message: 'Not authorized' });
+        // Restriction: Only Admins can update budgets
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ message: 'Only administrators can update budgets' });
+        }
+
+        // Still check if it belongs to their organization
+        if (budget.organizationId !== req.user.organizationId) {
+            return res.status(401).json({ message: 'Not authorized for this organization' });
         }
 
         if (amount && (isNaN(amount) || parseFloat(amount) <= 0)) {

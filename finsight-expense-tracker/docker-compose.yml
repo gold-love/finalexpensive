@@ -8,8 +8,6 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: finsight_db
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -23,7 +21,7 @@ services:
       - DB_USER=postgres
       - DB_PASS=postgres
       - DB_NAME=finsight_db
-      - JWT_SECRET=finsight_secret_key_123
+      - JWT_SECRET=${JWT_SECRET:-finsight_super_secret_key_change_me_in_production_1234567890}
       - NODE_ENV=production
     depends_on:
       - db

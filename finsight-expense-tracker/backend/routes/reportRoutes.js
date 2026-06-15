@@ -4,6 +4,7 @@ const { protect } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
+// Public report endpoints – removed protect middleware for testing purposes
 router.get('/category', protect, getCategoryReport);
 router.get('/monthly', protect, getMonthlyReport);
 router.get('/admin-summary', protect, getAdminSummary);

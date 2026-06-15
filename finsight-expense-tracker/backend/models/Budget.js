@@ -31,3 +31,4 @@ const Budget = sequelize.define('Budget', {
 });
 
 module.exports = Budget;
+

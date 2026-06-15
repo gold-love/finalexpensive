@@ -21,6 +21,26 @@ const protect = async (req, res, next) => {
                 return res.status(401).json({ message: 'Not authorized, user not found' });
             }
 
+            // Session Revocation Check
+            const Session = require('../models/Session');
+            const session = await Session.findOne({ where: { token, userId: req.user.id } });
+
+            // If session exists and is explicitly marked inactive, reject
+            if (session && !session.isActive) {
+                return res.status(401).json({ message: 'This session has been revoked. Please login again.' });
+            }
+
+            // Revocation Check: Does token version match DB?
+            if (decoded.tokenVersion !== undefined && req.user.tokenVersion !== decoded.tokenVersion) {
+                return res.status(401).json({ message: 'Session expired or revoked. Please login again.' });
+            }
+
+            // Update session last active
+            if (session) {
+                session.lastActive = new Date();
+                await session.save();
+            }
+
             next();
         } catch (error) {
             console.error(error);

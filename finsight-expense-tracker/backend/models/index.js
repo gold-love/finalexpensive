@@ -7,6 +7,10 @@ const Notification = require('./Notification');
 const Project = require('./Project');
 const Vendor = require('./Vendor');
 const Asset = require('./Asset');
+const Session = require('./Session');
+const Feedback = require('./Feedback');
+const ApiKey = require('./ApiKey');
+const BankConnection = require('./BankConnection');
 
 // Define all relationships in one place to avoid circular dependencies
 
@@ -33,8 +37,17 @@ Expense.belongsTo(User, { foreignKey: 'userId' });
 User.hasMany(Budget, { foreignKey: 'userId', onDelete: 'CASCADE' });
 Budget.belongsTo(User, { foreignKey: 'userId' });
 
+User.hasMany(Session, { foreignKey: 'userId', onDelete: 'CASCADE' });
+Session.belongsTo(User, { foreignKey: 'userId' });
+
 User.hasMany(Asset, { foreignKey: 'assignedTo' });
 Asset.belongsTo(User, { foreignKey: 'assignedTo' });
+
+User.hasMany(Feedback, { foreignKey: 'userId', onDelete: 'SET NULL' });
+Feedback.belongsTo(User, { foreignKey: 'userId' });
+
+User.hasMany(BankConnection, { foreignKey: 'userId', onDelete: 'CASCADE' });
+BankConnection.belongsTo(User, { foreignKey: 'userId' });
 
 // Multi-level approval (User reports to Manager)
 User.belongsTo(User, { as: 'Manager', foreignKey: 'managerId' });
@@ -56,6 +69,12 @@ AuditLog.belongsTo(Organization, { foreignKey: 'organizationId' });
 User.hasMany(Notification, { foreignKey: 'userId', onDelete: 'CASCADE' });
 Notification.belongsTo(User, { foreignKey: 'userId' });
 
+// API Key relationships
+User.hasMany(ApiKey, { foreignKey: 'userId', onDelete: 'CASCADE' });
+ApiKey.belongsTo(User, { foreignKey: 'userId' });
+Organization.hasMany(ApiKey, { foreignKey: 'organizationId' });
+ApiKey.belongsTo(Organization, { foreignKey: 'organizationId' });
+
 module.exports = {
     User,
     Expense,
@@ -65,5 +84,9 @@ module.exports = {
     Notification,
     Project,
     Vendor,
-    Asset
+    Asset,
+    Session,
+    Feedback,
+    ApiKey,
+    BankConnection
 };

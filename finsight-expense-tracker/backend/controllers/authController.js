@@ -1,10 +1,13 @@
 const User = require('../models/User');
 const Organization = require('../models/Organization');
+const Session = require('../models/Session');
 const jwt = require('jsonwebtoken');
+const { parseUA } = require('../utils/uaParser');
 const { verify2FAToken } = require('../utils/twoFactor');
+const { logAudit } = require('../utils/audit');
 
-const generateToken = (id) => {
-    return jwt.sign({ id }, process.env.JWT_SECRET || 'secret', {
+const generateToken = (id, tokenVersion) => {
+    return jwt.sign({ id, tokenVersion }, process.env.JWT_SECRET || 'secret', {
         expiresIn: '30d',
     });
 };
@@ -59,11 +62,17 @@ const registerUser = async (req, res) => {
                 email: user.email,
                 role: user.role,
                 theme: user.theme,
-                preferredCurrency: user.preferredCurrency,
                 emailNotifications: user.emailNotifications,
+                jobTitle: user.jobTitle,
+                department: user.department,
+                phoneNumber: user.phoneNumber,
+                timezone: user.timezone,
+                employeeId: user.employeeId,
                 twoFactorEnabled: user.twoFactorEnabled,
                 profilePicture: user.profilePicture,
-                token: generateToken(user.id),
+                organizationId: user.organizationId,
+                tokenVersion: user.tokenVersion,
+                token: generateToken(user.id, user.tokenVersion),
 
 
             });
@@ -85,6 +94,20 @@ const loginUser = async (req, res) => {
             return res.status(401).json({ message: 'Invalid email or password' });
         }
 
+        // Check if user is active
+        if (!user.isActive) {
+            await logAudit({
+                req,
+                userId: user.id,
+                organizationId: user.organizationId,
+                action: 'Login Failed',
+                targetType: 'User',
+                targetId: user.id,
+                details: { method: 'password', reason: 'account_deactivated' }
+            });
+            return res.status(403).json({ message: 'Your account has been deactivated. Please contact your administrator.' });
+        }
+
         // Check if account is locked
         if (user.lockUntil && user.lockUntil > Date.now()) {
             const minutesRemaining = Math.ceil((user.lockUntil - Date.now()) / (60 * 1000));
@@ -101,10 +124,28 @@ const loginUser = async (req, res) => {
 
             // Enterprise Check: Is 2FA enabled?
             if (user.twoFactorEnabled) {
+                if (user.twoFactorType === 'email') {
+                    const sendEmail = require('../utils/sendEmail');
+                    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+                    user.twoFactorSecret = otp;
+                    user.twoFactorExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+                    await user.save();
+
+                    await sendEmail({
+                        email: user.email,
+                        subject: 'Finsight - Your Login OTP Code',
+                        message: `Your login code is ${otp}. It expires in 10 minutes.`
+                    });
+                }
+
                 return res.json({
                     requires2FA: true,
                     userId: user.id,
-                    message: 'Two-factor authentication required'
+                    twoFactorType: user.twoFactorType,
+                    message: user.twoFactorType === 'email' 
+                        ? 'Two-factor authentication required. An OTP has been sent to your email.' 
+                        : 'Two-factor authentication required. Please enter your authenticator app code.'
                 });
             }
 
@@ -112,6 +153,30 @@ const loginUser = async (req, res) => {
             const Organization = require('../models/Organization');
             const org = await Organization.findByPk(user.organizationId);
             const orgSettings = org ? org.settings : {};
+
+            await logAudit({
+                req,
+                userId: user.id,
+                organizationId: user.organizationId,
+                action: 'Login',
+                targetType: 'User',
+                targetId: user.id,
+                details: { method: 'password' }
+            });
+
+            const token = generateToken(user.id, user.tokenVersion);
+
+            // Create Session Tracking
+            const uaInfo = parseUA(req.headers['user-agent']);
+            await Session.create({
+                userId: user.id,
+                token: token,
+                ipAddress: req.ip || req.connection.remoteAddress,
+                userAgent: req.headers['user-agent'],
+                browser: uaInfo.browser,
+                os: uaInfo.os,
+                deviceType: uaInfo.device
+            });
 
             res.json({
                 id: user.id,
@@ -122,13 +187,19 @@ const loginUser = async (req, res) => {
                 organizationId: user.organizationId,
                 preferredCurrency: user.preferredCurrency,
                 emailNotifications: user.emailNotifications,
+                jobTitle: user.jobTitle,
+                department: user.department,
+                phoneNumber: user.phoneNumber,
+                timezone: user.timezone,
+                employeeId: user.employeeId,
                 twoFactorEnabled: user.twoFactorEnabled,
                 profilePicture: user.profilePicture,
                 orgSettings: {
                     expenseModuleEnabled: orgSettings.expenseModuleEnabled !== undefined ? orgSettings.expenseModuleEnabled : true,
                     budgetModuleEnabled: orgSettings.budgetModuleEnabled !== undefined ? orgSettings.budgetModuleEnabled : true,
                 },
-                token: generateToken(user.id),
+                branding: org ? org.branding : null,
+                token,
             });
         } else {
             // Failed password attempt
@@ -143,6 +214,17 @@ const loginUser = async (req, res) => {
             }
 
             await user.save();
+            
+            await logAudit({
+                req,
+                userId: user.id,
+                organizationId: user.organizationId,
+                action: 'Login Failed',
+                targetType: 'User',
+                targetId: user.id,
+                details: { method: 'password', reason: 'invalid_credentials', attempts: user.loginAttempts }
+            });
+
             res.status(401).json({ message });
         }
     } catch (error) {
@@ -159,7 +241,7 @@ const verify2FALogin = async (req, res) => {
     try {
         const user = await User.findByPk(userId);
 
-        if (!user || !user.twoFactorEnabled) {
+        if (!user || !user.twoFactorEnabled || !user.isActive) {
             return res.status(400).json({ message: 'Invalid request' });
         }
 
@@ -171,19 +253,43 @@ const verify2FALogin = async (req, res) => {
             });
         }
 
-        const isValid = verify2FAToken(user.twoFactorSecret, token);
+        let isValid = false;
+        let isRecovery = false;
+
+        if (user.twoFactorType === 'totp') {
+            const { verify2FAToken } = require('../utils/twoFactor');
+            isValid = verify2FAToken(user.twoFactorSecret, token);
+            if (!isValid && user.twoFactorRecoveryCodes && user.twoFactorRecoveryCodes.includes(token)) {
+                isValid = true;
+                isRecovery = true;
+                user.twoFactorRecoveryCodes = user.twoFactorRecoveryCodes.filter(c => c !== token);
+            }
+        } else {
+            isValid = token === user.twoFactorSecret && new Date() < user.twoFactorExpires;
+            if (!isValid && user.twoFactorRecoveryCodes && user.twoFactorRecoveryCodes.includes(token)) {
+                isValid = true;
+                isRecovery = true;
+                user.twoFactorRecoveryCodes = user.twoFactorRecoveryCodes.filter(c => c !== token);
+            }
+        }
 
         if (!isValid) {
             user.loginAttempts += 1;
-            let message = 'Invalid 2FA code';
+            let message = 'Invalid OTP or Recovery code';
 
             if (user.loginAttempts >= 5) {
                 user.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
-                message = 'Too many failed 2FA attempts. Account locked for 15 minutes.';
+                message = 'Too many failed OTP attempts. Account locked for 15 minutes.';
             }
 
             await user.save();
             return res.status(401).json({ message });
+        }
+
+        // Success - clear email OTP if used
+        if (user.twoFactorType === 'email') {
+            user.twoFactorSecret = null;
+            user.twoFactorExpires = null;
         }
 
         // Success - reset attempts
@@ -196,6 +302,20 @@ const verify2FALogin = async (req, res) => {
         const org = await Organization.findByPk(user.organizationId);
         const orgSettings = org ? org.settings : {};
 
+        const token = generateToken(user.id, user.tokenVersion);
+
+        // Create Session Tracking
+        const uaInfo = parseUA(req.headers['user-agent']);
+        await Session.create({
+            userId: user.id,
+            token: token,
+            ipAddress: req.ip || req.connection.remoteAddress,
+            userAgent: req.headers['user-agent'],
+            browser: uaInfo.browser,
+            os: uaInfo.os,
+            deviceType: uaInfo.device
+        });
+
         res.json({
             id: user.id,
             name: user.name,
@@ -205,13 +325,29 @@ const verify2FALogin = async (req, res) => {
             organizationId: user.organizationId,
             preferredCurrency: user.preferredCurrency,
             emailNotifications: user.emailNotifications,
+            jobTitle: user.jobTitle,
+            department: user.department,
+            phoneNumber: user.phoneNumber,
+            timezone: user.timezone,
+            employeeId: user.employeeId,
             twoFactorEnabled: user.twoFactorEnabled,
             profilePicture: user.profilePicture,
             orgSettings: {
                 expenseModuleEnabled: orgSettings.expenseModuleEnabled !== undefined ? orgSettings.expenseModuleEnabled : true,
                 budgetModuleEnabled: orgSettings.budgetModuleEnabled !== undefined ? orgSettings.budgetModuleEnabled : true,
             },
-            token: generateToken(user.id),
+            branding: org ? org.branding : null,
+            token,
+        });
+
+        await logAudit({
+            req,
+            userId: user.id,
+            organizationId: user.organizationId,
+            action: 'Login',
+            targetType: 'User',
+            targetId: user.id,
+            details: { method: 'email_otp' }
         });
     } catch (error) {
         res.status(500).json({ message: error.message });
@@ -229,7 +365,13 @@ const getUserProfile = async (req, res) => {
                 email: user.email,
                 role: user.role,
                 theme: user.theme,
+                jobTitle: user.jobTitle,
+                department: user.department,
+                phoneNumber: user.phoneNumber,
+                timezone: user.timezone,
+                employeeId: user.employeeId,
                 preferredCurrency: user.preferredCurrency,
+                language: user.language,
                 emailNotifications: user.emailNotifications,
                 twoFactorEnabled: user.twoFactorEnabled,
                 profilePicture: user.profilePicture
@@ -250,16 +392,39 @@ const updateUserProfile = async (req, res) => {
         if (user) {
             user.name = req.body.name || user.name;
             user.email = req.body.email || user.email;
+            user.jobTitle = req.body.jobTitle !== undefined ? req.body.jobTitle : user.jobTitle;
+            user.department = req.body.department !== undefined ? req.body.department : user.department;
+            user.phoneNumber = req.body.phoneNumber !== undefined ? req.body.phoneNumber : user.phoneNumber;
+            user.timezone = req.body.timezone || user.timezone;
+            user.employeeId = req.body.employeeId !== undefined ? req.body.employeeId : user.employeeId;
             user.preferredCurrency = req.body.preferredCurrency || user.preferredCurrency;
+            user.language = req.body.language || user.language;
             user.theme = req.body.theme || user.theme;
+            user.bio = req.body.bio !== undefined ? req.body.bio : user.bio;
             user.emailNotifications = req.body.emailNotifications !== undefined ? req.body.emailNotifications : user.emailNotifications;
             user.twoFactorEnabled = req.body.twoFactorEnabled !== undefined ? req.body.twoFactorEnabled : user.twoFactorEnabled;
             if (req.body.password) {
-
+                if (!req.body.currentPassword) {
+                    return res.status(400).json({ message: 'Current password is required to set a new password' });
+                }
+                const isMatch = await user.matchPassword(req.body.currentPassword);
+                if (!isMatch) {
+                    return res.status(401).json({ message: 'Incorrect current password' });
+                }
                 user.password = req.body.password;
             }
 
             const updatedUser = await user.save();
+
+            if (req.body.password) {
+                await logAudit({
+                    req,
+                    action: 'Password Change',
+                    targetType: 'User',
+                    targetId: user.id,
+                    details: {}
+                });
+            }
 
             res.json({
                 id: updatedUser.id,
@@ -267,13 +432,20 @@ const updateUserProfile = async (req, res) => {
                 email: updatedUser.email,
                 role: updatedUser.role,
                 theme: updatedUser.theme,
-                preferredCurrency: updatedUser.preferredCurrency,
-                emailNotifications: updatedUser.emailNotifications,
-                twoFactorEnabled: updatedUser.twoFactorEnabled,
+                jobTitle: updatedUser.jobTitle,
+                department: updatedUser.department,
+                phoneNumber: updatedUser.phoneNumber,
+                timezone: updatedUser.timezone,
+                employeeId: updatedUser.employeeId,
                 profilePicture: updatedUser.profilePicture,
-                token: generateToken(updatedUser.id),
-
-
+                organizationId: updatedUser.organizationId,
+                tokenVersion: updatedUser.tokenVersion,
+                preferredCurrency: updatedUser.preferredCurrency,
+                language: updatedUser.language,
+                bio: updatedUser.bio,
+                orgSettings: req.user.orgSettings,
+                branding: req.user.branding,
+                token: generateToken(updatedUser.id, updatedUser.tokenVersion),
             });
         } else {
             res.status(404).json({ message: 'User not found' });

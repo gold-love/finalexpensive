@@ -45,6 +45,7 @@ const processRecurringExpenses = async () => {
                 if (!exists) {
                     await Expense.create({
                         userId: expense.userId,
+                        organizationId: expense.organizationId, // FIX: Carry over org context
                         title: expense.title,
                         amount: expense.amount,
                         category: expense.category,

@@ -1,935 +1,1012 @@
 import React, { useContext, useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import AuthContext from '../context/AuthContext';
 import ThemeContext from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import api from '../services/api';
-import { Html5QrcodeScanner } from 'html5-qrcode';
-
-const IdentityCard = ({ user, qrCode }) => (
-    <div className="printable-card" style={{
-        width: '320px',
-        height: '500px',
-        background: 'white',
-        borderRadius: '20px',
-        border: '1px solid #e2e8f0',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        padding: '30px',
-        position: 'relative',
-        boxShadow: '0 10px 25px rgba(0,0,0,0.05)',
-        color: '#1e293b',
-        margin: '20px auto'
-    }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '8px', background: 'var(--grad-primary)', borderRadius: '20px 20px 0 0' }} />
-        <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-            <h2 style={{ fontSize: '1.5rem', display: 'flex', alignItems: 'center', gap: '8px', margin: 0, justifyContent: 'center' }}>
-                <span style={{ color: 'var(--primary)' }}>●</span> Finsight
-            </h2>
-            <p style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px', margin: '4px 0 0 0' }}>Enterprise Intelligence</p>
-        </div>
-        <div style={{
-            width: '120px', height: '120px', borderRadius: '50%', background: '#f1f5f9',
-            backgroundImage: user?.profilePicture ? `url(http://localhost:5000/${user.profilePicture.replace(/\\/g, '/')})` : 'none',
-            backgroundSize: 'cover', backgroundPosition: 'center', marginBottom: '20px', border: '4px solid white', boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b', fontSize: '48px', fontWeight: 'bold'
-        }}>
-            {!user?.profilePicture && (user?.name?.charAt(0) || 'U')}
-        </div>
-        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-            <h3 style={{ margin: 0, fontSize: '1.25rem' }}>{user.name}</h3>
-            <p style={{ margin: '4px 0 0 0', color: 'var(--primary)', fontWeight: '700', fontSize: '13px', textTransform: 'uppercase' }}>{user.role}</p>
-        </div>
-        <div style={{ background: 'white', padding: '12px', borderRadius: '12px', border: '2px solid #f1f5f9', marginBottom: '20px' }}>
-            <img src={qrCode} alt="Security Key" style={{ width: '130px', height: '130px' }} />
-        </div>
-        <div style={{ textAlign: 'center', marginTop: 'auto' }}>
-            <p style={{ fontSize: '11px', color: '#94a3b8', margin: 0 }}>ID: FS-{user.id?.toString().padStart(6, '0') || 'DEMO'}</p>
-            <p style={{ fontSize: '10px', color: '#94a3b8', fontWeight: 'bold' }}>SECURE ACCESS ONLY</p>
-        </div>
-    </div>
-);
+import { getTranslation } from '../utils/i18n';
+import BankIntegration from '../components/BankIntegration';
 
 const Settings = () => {
-    const { user, updateProfile, updateProfileImage } = useContext(AuthContext);
+    const { user, updateProfile, updateProfileImage, setUser } = useContext(AuthContext);
     const { theme, toggleTheme } = useContext(ThemeContext);
     const toast = useToast();
-    const fileInputRef = useRef(null);
+    const location = useLocation();
 
-    const handlePrintCard = () => {
-        const printContent = document.getElementById('identity-card-container').innerHTML;
-        const originalContent = document.body.innerHTML;
-        document.body.innerHTML = `
-            <html>
-                <head>
-                    <title>Finsight Identity Card - ${user.name}</title>
-                    <style>
-                        body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: white; }
-                        * { -webkit-print-color-adjust: exact !important; color-adjust: exact !important; }
-                    </style>
-                </head>
-                <body>${printContent}</body>
-            </html>
-        `;
-        window.print();
-        document.body.innerHTML = originalContent;
-        window.location.reload(); // Required because React state is lost when overwriting innerHTML
-    };
+    // Tabs
+    const [activeTab, setActiveTab] = useState('profile');
 
-    // Basic Settings
+    // Profile Settings
     const [name, setName] = useState(user?.name || '');
     const [email, setEmail] = useState(user?.email || '');
+    const [jobTitle, setJobTitle] = useState(user?.jobTitle || '');
+    const [department, setDepartment] = useState(user?.department || '');
+    const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || '');
+    const [timezone, setTimezone] = useState(user?.timezone || 'UTC');
+    const [timezoneTime, setTimezoneTime] = useState('');
+    const [employeeId, setEmployeeId] = useState(user?.employeeId || '');
+    const [bio, setBio] = useState(user?.bio || '');
     const [password, setPassword] = useState('');
-    const [currency, setCurrency] = useState(user?.preferredCurrency || 'USD');
-    const [uploading, setUploading] = useState(false);
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [currentPassword, setCurrentPassword] = useState('');
 
-    // Advanced Settings
-    const [fiscalYearStart, setFiscalYearStart] = useState(user?.fiscalYearStart || 1);
-    const [defaultCategory, setDefaultCategory] = useState(user?.defaultCategory || '');
-    const [defaultBudgetCategory, setDefaultBudgetCategory] = useState(user?.defaultBudgetCategory || '');
-    const [defaultCurrency, setDefaultCurrency] = useState(user?.defaultCurrency || 'USD');
-
-    // Organization Settings (Admin only)
-    const [orgSettings, setOrgSettings] = useState({
-        requireReceipts: false,
-        autoApproveLimit: 0,
-        autoApproveBudgetLimit: 0,
-        expenseModuleEnabled: true,
-        budgetModuleEnabled: true,
-        allowMultiCurrency: true
-    });
+    // Security & 2FA
+    const [twoFactorEnabled, setTwoFactorEnabled] = useState(user?.twoFactorEnabled ?? false);
+    const [sessions, setSessions] = useState([]);
+    const [securityLogs, setSecurityLogs] = useState([]);
+    const [currentSessionId, setCurrentSessionId] = useState(null);
 
     // Notification Preferences
-    const [notificationPrefs, setNotificationPrefs] = useState({
+    const [notifPrefs, setNotifPrefs] = useState({
         budgetAlerts: user?.notificationPreferences?.budgetAlerts ?? true,
         expenseApproved: user?.notificationPreferences?.expenseApproved ?? true,
         expenseRejected: user?.notificationPreferences?.expenseRejected ?? true,
         weeklyReport: user?.notificationPreferences?.weeklyReport ?? false,
         monthlyReport: user?.notificationPreferences?.monthlyReport ?? true
     });
+    const [budgetThreshold, setBudgetThreshold] = useState(user?.budgetThreshold ?? 80);
 
-    // 2FA State
-    const [twoFactorEnabled, setTwoFactorEnabled] = useState(user?.twoFactorEnabled ?? false);
-    const [qrCode, setQrCode] = useState(null);
-    const [twoFAToken, setTwoFAToken] = useState('');
-    const [passwordFor2FA, setPasswordFor2FA] = useState('');
-    const [showScanner, setShowScanner] = useState(false);
+    // Advanced Preferences
+    const [fiscalYearStart, setFiscalYearStart] = useState(user?.fiscalYearStart || 1);
+    const [defaultCurrency, setDefaultCurrency] = useState(user?.preferredCurrency || 'USD');
+    const [language, setLanguage] = useState(user?.language || 'en');
 
-    // Audit State
+    // Organization & Branding (Admin only)
+    const [orgSettings, setOrgSettings] = useState({
+        autoApproveLimit: 0,
+        requireReceipts: false,
+    });
+    const [branding, setBranding] = useState({
+        primaryColor: '#6366f1',
+        logoUrl: ''
+    });
+
+    // API Keys
+    const [apiKeys, setApiKeys] = useState([]);
+    const [newKeyName, setNewKeyName] = useState('');
+    const [generatedKey, setGeneratedKey] = useState(null);
+
+    // Audit Logs
     const [auditLogs, setAuditLogs] = useState([]);
-    const [loadingAudit, setLoadingAudit] = useState(false);
 
-    const [activeTab, setActiveTab] = useState('profile');
-
-    useEffect(() => {
-        if (activeTab === 'audit' && user?.role === 'admin') {
-            fetchAuditLogs();
-        }
-        if (activeTab === 'organization' && user?.role === 'admin') {
-            fetchOrgSettings();
-        }
-    }, [activeTab]);
+    // 2FA Flow state
+    const [show2FAInput, setShow2FAInput] = useState(false);
+    const [twoFactorToken, setTwoFactorToken] = useState('');
+    const [recoveryCodes, setRecoveryCodes] = useState(null);
+    const [qrCode, setQrCode] = useState(null);
+    const [twoFactorTypeSetting, setTwoFactorTypeSetting] = useState('email');
 
     useEffect(() => {
-        if (showScanner && activeTab === 'security' && !twoFactorEnabled) {
-            const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
-            scanner.render((decodedText) => {
-                // Handle OTP Auth URL or plain code
-                if (decodedText.includes('otpauth://')) {
-                    const url = new URL(decodedText);
-                    const secret = url.searchParams.get('secret');
-                    setTwoFAToken(secret || '');
-                } else {
-                    setTwoFAToken(decodedText);
-                }
-                scanner.clear();
-                setShowScanner(false);
-            }, (error) => {
-                // Ignore errors
-            });
-            return () => {
-                try {
-                    scanner.clear();
-                } catch (e) { }
-            };
-        }
-    }, [showScanner, activeTab, twoFactorEnabled]);
+        if (location.state?.tab) setActiveTab(location.state.tab);
+    }, [location.state]);
 
-    useEffect(() => {
-        if (activeTab === 'security' && twoFactorEnabled && !qrCode) {
-            fetchActiveQR();
-        }
-    }, [activeTab]);
-
-    const fetchActiveQR = async () => {
-        try {
-            const response = await api.get('/settings/2fa/qr');
-            setQrCode(response.data.qrcode);
-        } catch (error) {
-            console.error('Failed to fetch active QR');
-        }
+    // IANA timezone map for abbreviations
+    const IANA_MAP = {
+        'UTC':    'UTC',
+        'CET':    'Europe/Paris',
+        'EET':    'Europe/Helsinki',
+        'AST':    'Asia/Riyadh',
+        'EAT':    'Africa/Nairobi',
+        'GST':    'Asia/Dubai',
+        'IST':    'Asia/Kolkata',
+        'CST':    'Asia/Shanghai',
+        'JST':    'Asia/Tokyo',
+        'AEST':   'Australia/Sydney',
+        'AST_NA': 'America/Halifax',
+        'EST':    'America/New_York',
+        'CST_NA': 'America/Chicago',
+        'MST':    'America/Denver',
+        'PST':    'America/Los_Angeles',
+        'AKST':   'America/Anchorage',
+        'HST':    'Pacific/Honolulu',
     };
 
-    const fetchAuditLogs = async () => {
-        setLoadingAudit(true);
-        try {
-            const response = await api.get('/settings/audit-logs');
-            setAuditLogs(response.data);
-        } catch (error) {
-            toast.error('Failed to fetch audit logs');
+    // Live clock — ticks every second in the selected timezone
+    useEffect(() => {
+        const tick = () => {
+            const iana = IANA_MAP[timezone] || 'UTC';
+            const now = new Date();
+            const formatted = now.toLocaleString('en-US', {
+                timeZone: iana,
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true,
+            });
+            setTimezoneTime(formatted);
+        };
+        tick();
+        const interval = setInterval(tick, 1000);
+        return () => clearInterval(interval);
+    }, [timezone]);
+
+    useEffect(() => {
+        if (activeTab === 'security') {
+            fetchSessions();
+            fetchSecurityLogs();
         }
-        setLoadingAudit(false);
+        if (activeTab === 'api') fetchApiKeys();
+        if (activeTab === 'organization' && user?.role === 'admin') fetchOrgSettings();
+        if (activeTab === 'audit' && user?.role === 'admin') fetchAuditLogs();
+    }, [activeTab]);
+
+    useEffect(() => {
+        if (branding?.primaryColor) {
+            document.documentElement.style.setProperty('--primary', branding.primaryColor);
+        }
+    }, [branding?.primaryColor]);
+
+    // Data Fetching
+    const fetchSessions = async () => {
+        try {
+            const { data } = await api.get('/settings/sessions');
+            setSessions(data);
+            // Current session is usually the first one or we can identify it by a property if we added it
+            if (data.length > 0) setCurrentSessionId(data[0].id); 
+        } catch { toast.error('Failed to load sessions'); }
+    };
+
+    const fetchSecurityLogs = async () => {
+        try {
+            const { data } = await api.get('/settings/security-logs');
+            setSecurityLogs(data);
+        } catch { toast.error('Failed to load security logs'); }
+    };
+
+    const fetchApiKeys = async () => {
+        try {
+            const { data } = await api.get('/settings/api-keys');
+            setApiKeys(data);
+        } catch { toast.error('Failed to load API keys'); }
     };
 
     const fetchOrgSettings = async () => {
         try {
-            const response = await api.get('/settings/organization');
-            setOrgSettings({
-                requireReceipts: response.data.requireReceipts,
-                autoApproveLimit: response.data.autoApproveLimit,
-                autoApproveBudgetLimit: response.data.autoApproveBudgetLimit,
-                expenseModuleEnabled: response.data.expenseModuleEnabled,
-                budgetModuleEnabled: response.data.budgetModuleEnabled,
-                allowMultiCurrency: response.data.allowMultiCurrency
+            const { data } = await api.get('/settings/organization');
+            setOrgSettings(data);
+            if (data.branding) setBranding(data.branding);
+        } catch { toast.error('Failed to load organization settings'); }
+    };
+
+    const fetchAuditLogs = async () => {
+        try {
+            const { data } = await api.get('/settings/audit-logs');
+            setAuditLogs(data);
+        } catch { toast.error('Failed to load audit logs'); }
+    };
+
+    // Handlers
+    const handleProfileUpdate = async (e) => {
+        e.preventDefault();
+        if (password && password !== confirmPassword) {
+            return toast.error('Passwords do not match');
+        }
+        try {
+            await updateProfile({ 
+                name, email, jobTitle, department, 
+                phoneNumber, timezone, employeeId, bio,
+                password, currentPassword, language 
             });
+            setPassword('');
+            setConfirmPassword('');
+            setCurrentPassword('');
+            toast.success('Profile updated successfully!');
         } catch (error) {
-            console.error('Failed to fetch org settings');
-            toast.error('Failed to load organization settings');
+            toast.error(error.response?.data?.message || 'Update failed');
         }
     };
 
-    const handleBasicSettingsSubmit = async (e) => {
+    const handleNotifUpdate = async () => {
+        try {
+            await api.put('/settings/notifications', { ...notifPrefs, budgetThreshold });
+            toast.success('Notifications updated!');
+        } catch { toast.error('Update failed'); }
+    };
+
+    const handleAdvancedUpdate = async () => {
+        try {
+            await api.put('/settings/preferences', { fiscalYearStart, preferredCurrency: defaultCurrency, language });
+            const updatedUser = { ...user, fiscalYearStart, preferredCurrency: defaultCurrency, language };
+            setUser(updatedUser);
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+            toast.success('Preferences updated!');
+        } catch { toast.error('Update failed'); }
+    };
+
+    const handleCreateKey = async (e) => {
         e.preventDefault();
         try {
-            await updateProfile({
-                name,
-                email,
-                password,
-                preferredCurrency: currency,
-                theme
-            });
-            toast.success('Profile updated successfully!');
-            setPassword('');
-        } catch (error) {
-            toast.error('Error updating profile');
-        }
+            const { data } = await api.post('/settings/api-keys', { name: newKeyName });
+            setGeneratedKey(data.key);
+            setNewKeyName('');
+            fetchApiKeys();
+            toast.success('Key generated!');
+        } catch { toast.error('Failed to generate key'); }
     };
 
-    const handleImageChange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const formData = new FormData();
-        formData.append('profile', file);
-
-        setUploading(true);
+    const handleRevokeKey = async (id) => {
+        if (!window.confirm('Revoke this key?')) return;
         try {
-            await updateProfileImage(formData);
-            toast.success('Profile picture updated!');
-        } catch (error) {
-            toast.error('Failed to upload image');
-        }
-        setUploading(false);
+            await api.delete(`/settings/api-keys/${id}`);
+            fetchApiKeys();
+            toast.success('Key revoked');
+        } catch { toast.error('Failed'); }
     };
 
-    const handleNotificationUpdate = async () => {
+    const handleRevokeSpecificSession = async (id) => {
+        if (!window.confirm('Revoke this session? This device will be logged out.')) return;
         try {
-            await api.put('/settings/notifications', notificationPrefs);
-            toast.success('Notification preferences saved!');
-        } catch (error) {
-            toast.error('Failed to save notification preferences');
-        }
+            await api.delete(`/settings/sessions/${id}`);
+            fetchSessions();
+            fetchSecurityLogs();
+            toast.success('Session revoked');
+        } catch { toast.error('Failed to revoke session'); }
     };
 
-    const handleAdvancedPreferencesUpdate = async () => {
+    const handleRevokeAllOtherSessions = async () => {
+        if (!window.confirm('Revoke ALL other sessions? Every other device will be logged out.')) return;
         try {
-            await api.put('/settings/preferences', {
-                fiscalYearStart,
-                defaultCategory,
-                defaultBudgetCategory,
-                defaultCurrency
-            });
-            toast.success('Advanced preferences saved!');
-        } catch (error) {
-            toast.error('Failed to save preferences');
-        }
+            await api.post('/settings/revoke-sessions', { currentSessionId });
+            fetchSessions();
+            fetchSecurityLogs();
+            toast.success('All other sessions revoked');
+        } catch { toast.error('Failed to revoke sessions'); }
     };
 
-    const handleOrgSettingsUpdate = async () => {
+    const handleEnable2FA = async (type = 'email') => {
         try {
-            await api.put('/settings/organization', orgSettings);
-            toast.success('Organization policies updated!');
-        } catch (error) {
-            toast.error('Failed to update organization settings');
-        }
-    };
-
-    const handleEnable2FA = async () => {
-        try {
-            const response = await api.post('/settings/2fa/enable');
-            setQrCode(response.data.qrcode);
-            toast.success('Scan the QR code or Download your Identity Card');
-        } catch (error) {
-            toast.error(error.response?.data?.message || 'Failed to enable 2FA');
-        }
+            const { data } = await api.post('/settings/2fa/enable', { type });
+            setShow2FAInput(true);
+            setTwoFactorTypeSetting(type);
+            if (data.qrcode) setQrCode(data.qrcode);
+            toast.info(type === 'email' ? 'Verification code sent to your email' : 'Scan the QR code with your authenticator app');
+        } catch { toast.error('Failed to start 2FA process'); }
     };
 
     const handleVerify2FA = async () => {
         try {
-            await api.post('/settings/2fa/verify', { token: twoFAToken });
+            const { data } = await api.post('/settings/2fa/verify', { token: twoFactorToken });
             setTwoFactorEnabled(true);
+            setShow2FAInput(false);
+            setTwoFactorToken('');
             setQrCode(null);
-            setTwoFAToken('');
-            setShowScanner(false);
+            if (data.recoveryCodes) setRecoveryCodes(data.recoveryCodes);
             toast.success('2FA enabled successfully!');
-        } catch (error) {
-            toast.error('Invalid verification code');
+        } catch (error) { 
+            toast.error(error.response?.data?.message || 'Invalid verification code'); 
         }
     };
 
     const handleDisable2FA = async () => {
+        if (!window.confirm('Disable 2FA? Your account will be less secure.')) return;
         try {
-            await api.post('/settings/2fa/disable', { password: passwordFor2FA, token: twoFAToken });
+            await api.post('/settings/2fa/disable');
             setTwoFactorEnabled(false);
-            setPasswordFor2FA('');
-            setTwoFAToken('');
             toast.success('2FA disabled');
-        } catch (error) {
-            toast.error('Failed to disable 2FA');
-        }
+        } catch { toast.error('Failed to disable 2FA'); }
+    };
+
+    const handleConnect = (name, url) => {
+        toast.info(`Redirecting to ${name}...`);
+        setTimeout(() => { window.open(url, '_blank'); }, 1000);
     };
 
     const handleExportData = async () => {
         try {
-            const response = await api.get('/reports/export', { responseType: 'blob' });
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', 'finsight_data_export.csv');
-            document.body.appendChild(link);
-            link.click();
-            toast.success('Data exported successfully!');
-        } catch (error) {
-            toast.error('Failed to export data');
-        }
+            const { data } = await api.get('/settings/export-data');
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `finsight_backup_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            toast.success('Backup generated successfully!');
+        } catch { toast.error('Failed to export data'); }
     };
 
-    const handleClearAllData = async () => {
-        if (!window.confirm('This will permanently delete ALL your expenses and budgets. Are you sure?')) return;
+    const handleRestoreData = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            try {
+                const jsonData = JSON.parse(event.target.result);
+                const records = jsonData.records || jsonData.expenses || [];
+                await api.post('/settings/organization/restore', { records });
+                toast.success('Data restore completed successfully!');
+            } catch { toast.error('Invalid backup file or restore failed.'); }
+            finally { e.target.value = ''; }
+        };
+        reader.readAsText(file);
+    };
 
+    const handleLogoUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const formData = new FormData();
+        formData.append('logo', file);
         try {
-            await api.delete('/settings/clear-data');
-            toast.success('All data cleared successfully');
-        } catch (error) {
-            toast.error('Failed to clear data');
-        }
+            toast.info('Uploading logo...');
+            const { data } = await api.post('/settings/organization/logo', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            setBranding({ ...branding, logoUrl: data.logoUrl });
+            toast.success('Logo uploaded! Save to apply changes.');
+        } catch { toast.error('Upload failed'); }
     };
 
-    const monthNames = [
-        'January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'
-    ];
+    const handleOrgUpdate = async () => {
+        try {
+            await api.put('/settings/organization', { ...orgSettings, branding });
+            toast.success('Organization updated!');
+        } catch { toast.error('Update failed'); }
+    };
 
     return (
         <div className="fade-in">
-            <h2 style={{ marginBottom: '24px' }}>Account Settings</h2>
+            <h2 style={{ marginBottom: '24px' }}>{getTranslation(user?.language, 'settings_enterprise_suite')}</h2>
 
-            {/* Tab Navigation */}
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', borderBottom: '2px solid var(--gray-light)', overflowX: 'auto' }}>
-                {['profile', 'security', 'notifications', 'advanced', 'data', ...(user?.role === 'admin' ? ['organization', 'audit'] : [])].map(tab => (
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '30px', borderBottom: '1px solid var(--gray-light)', overflowX: 'auto', paddingBottom: '10px' }}>
+                {[
+                    { id: 'profile', label: getTranslation(user?.language, 'profile'), icon: '👤' },
+                    { id: 'security', label: getTranslation(user?.language, 'security'), icon: '🛡️' },
+                    { id: 'notifications', label: getTranslation(user?.language, 'alerts'), icon: '🔔' },
+                    { id: 'advanced', label: getTranslation(user?.language, 'general'), icon: '⚙️' },
+                    { id: 'api', label: getTranslation(user?.language, 'api_keys'), icon: '🔑' },
+                    { id: 'integrations', label: getTranslation(user?.language, 'integrations'), icon: '🔌' },
+                    { id: 'data', label: getTranslation(user?.language, 'backup'), icon: '💾' },
+                    ...(user?.role === 'admin' ? [
+                        { id: 'organization', label: getTranslation(user?.language, 'organization'), icon: '🏢' },
+                        { id: 'audit', label: getTranslation(user?.language, 'audit_logs'), icon: '📋' }
+                    ] : [])
+                ].map(tab => (
                     <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab)}
-                        style={{
-                            padding: '12px 24px',
-                            background: activeTab === tab ? 'var(--primary)' : 'none',
-                            color: activeTab === tab ? 'white' : 'var(--dark-soft)',
-                            border: 'none',
-                            borderBottom: activeTab === tab ? '3px solid var(--primary)' : '3px solid transparent',
-                            cursor: 'pointer',
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`btn ${activeTab === tab.id ? 'btn-primary' : ''}`}
+                        style={{ 
+                            background: activeTab === tab.id ? 'var(--primary)' : 'rgba(255,255,255,0.8)', 
+                            color: activeTab === tab.id ? 'white' : 'var(--dark-soft)', 
+                            border: '1px solid var(--gray-light)', 
+                            padding: '12px 24px', 
+                            borderRadius: '14px', 
+                            fontWeight: '700',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
                             whiteSpace: 'nowrap',
-                            fontWeight: '600',
-                            transition: 'all 0.2s'
+                            boxShadow: activeTab === tab.id ? '0 4px 12px rgba(99, 102, 241, 0.3)' : 'none'
                         }}
                     >
-                        {tab === 'audit' ? '📋 Audit Logs' : tab === 'organization' ? '🏢 Organization' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                        <span style={{ fontSize: '18px' }}>{tab.icon}</span>
+                        {tab.label}
                     </button>
                 ))}
             </div>
 
-            {/* Tab Content */}
+            {/* Profile Tab */}
             {activeTab === 'profile' && (
-                <div className="card">
-                    <h3 style={{ marginBottom: '20px' }}>👤 Profile Information</h3>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '30px', padding: '20px', background: 'var(--gray-light)', borderRadius: '12px' }}>
-                        <div style={{ position: 'relative' }}>
-                            <div style={{
-                                width: '100px',
-                                height: '100px',
-                                borderRadius: '50%',
-                                background: 'var(--grad-primary)',
-                                backgroundImage: user?.profilePicture ? `url(http://localhost:5000/${user.profilePicture.replace(/\\/g, '/')})` : 'none',
-                                backgroundSize: 'cover',
-                                backgroundPosition: 'center',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: 'white',
-                                fontSize: '32px',
-                                fontWeight: 'bold',
-                                border: '4px solid white',
-                                boxShadow: 'var(--shadow)'
-                            }}>
-                                {!user?.profilePicture && (user?.name?.charAt(0) || 'U')}
+                <div className="card slide-up" style={{ padding: '30px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '30px', paddingBottom: '20px', borderBottom: '1px solid var(--gray-light)' }}>
+                        <div style={{ marginRight: '30px', position: 'relative' }}>
+                            <div style={{ width: '120px', height: '120px', borderRadius: '30px', background: 'linear-gradient(135deg, var(--primary-light), var(--primary))', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '4px solid var(--white)', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}>
+                                {user?.profilePicture ? (
+                                    <img src={`http://localhost:5000/${user.profilePicture.startsWith('/') ? user.profilePicture.slice(1) : user.profilePicture}`} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                ) : (
+                                    <span style={{ fontSize: '50px', color: 'white' }}>{user?.name?.charAt(0) || 'U'}</span>
+                                )}
                             </div>
-                            <button
-                                onClick={() => fileInputRef.current.click()}
-                                style={{
-                                    position: 'absolute',
-                                    bottom: '0',
-                                    right: '0',
-                                    background: 'var(--primary)',
-                                    color: 'white',
-                                    border: 'none',
-                                    width: '32px',
-                                    height: '32px',
-                                    borderRadius: '50%',
-                                    cursor: 'pointer',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    boxShadow: 'var(--shadow-sm)'
-                                }}
-                                disabled={uploading}
-                            >
-                                {uploading ? '⏳' : '📷'}
-                            </button>
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                onChange={handleImageChange}
-                                style={{ display: 'none' }}
+                            <label htmlFor="profile-upload" style={{ position: 'absolute', bottom: '-12px', left: '50%', transform: 'translateX(-50%)', background: 'var(--white)', color: 'var(--primary)', padding: '6px 14px', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.15)', fontSize: '12px', fontWeight: '800', border: '2px solid var(--primary-light)', whiteSpace: 'nowrap', transition: 'all 0.2s ease' }}>
+                                Edit Profile
+                            </label>
+                            <input 
+                                type="file" 
+                                id="profile-upload" 
+                                style={{ display: 'none' }} 
                                 accept="image/*"
+                                onChange={async (e) => {
+                                    const file = e.target.files[0];
+                                    if (file) {
+                                        const formData = new FormData();
+                                        formData.append('profile', file);
+                                        try {
+                                            toast.info('Uploading avatar...');
+                                            await updateProfileImage(formData);
+                                            toast.success('Profile picture updated!');
+                                        } catch {
+                                            toast.error('Failed to upload picture');
+                                        }
+                                    }
+                                }} 
                             />
                         </div>
                         <div>
-                            <h4 style={{ margin: 0 }}>{user?.name}</h4>
-                            <p style={{ margin: '4px 0 0 0', color: 'var(--gray)', fontSize: '0.9rem' }}>{user?.email}</p>
-                            <span style={{
-                                display: 'inline-block',
-                                marginTop: '8px',
-                                padding: '4px 10px',
-                                borderRadius: '20px',
-                                fontSize: '0.75rem',
-                                fontWeight: '700',
-                                textTransform: 'uppercase',
-                                background: user?.role === 'admin' ? '#e0e7ff' : '#f1f5f9',
-                                color: user?.role === 'admin' ? '#4338ca' : '#475569'
-                            }}>
-                                {user?.role}
-                            </span>
+                            <h3 style={{ margin: '0 0 5px 0', fontSize: '24px' }}>{name || getTranslation(user?.language, 'personal_profile')}</h3>
+                            <p style={{ margin: '0', color: 'var(--gray)', fontSize: '14px' }}>Update your personal details and public profile picture.</p>
                         </div>
                     </div>
 
-                    <form onSubmit={handleBasicSettingsSubmit}>
-                        <div className="form-group">
-                            <label>Full Name</label>
-                            <input
-                                type="text"
-                                className="form-control"
-                                value={name}
-                                onChange={(e) => setName(e.target.value)}
+                    <form onSubmit={handleProfileUpdate}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '25px' }}>
+                            <div className="form-group">
+                                <label style={{ fontWeight: '600', color: 'var(--dark-soft)', marginBottom: '8px', display: 'block' }}>{getTranslation(user?.language, 'full_name')}</label>
+                                <input className="form-control" style={{ borderRadius: '10px' }} value={name} onChange={e => setName(e.target.value)} />
+                            </div>
+                            <div className="form-group">
+                                <label style={{ fontWeight: '600', color: 'var(--dark-soft)', marginBottom: '8px', display: 'block' }}>{getTranslation(user?.language, 'email_address')}</label>
+                                <input className="form-control" style={{ borderRadius: '10px' }} value={email} onChange={e => setEmail(e.target.value)} />
+                            </div>
+                            <div className="form-group">
+                                <label style={{ fontWeight: '600', color: 'var(--dark-soft)', marginBottom: '8px', display: 'block' }}>{getTranslation(user?.language, 'phone_number')}</label>
+                                <input className="form-control" style={{ borderRadius: '10px' }} value={phoneNumber} onChange={e => setPhoneNumber(e.target.value)} placeholder="+1 (555) 000-0000" />
+                            </div>
+                            <div className="form-group">
+                                <label style={{ fontWeight: '600', color: 'var(--dark-soft)', marginBottom: '8px', display: 'block' }}>{getTranslation(user?.language, 'employee_id')}</label>
+                                <input className="form-control" style={{ borderRadius: '10px' }} value={employeeId} onChange={e => setEmployeeId(e.target.value)} />
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '25px' }}>
+                            <div className="form-group">
+                                <label style={{ fontWeight: '600', color: 'var(--dark-soft)', marginBottom: '8px', display: 'block' }}>{getTranslation(user?.language, 'job_title')}</label>
+                                <input className="form-control" style={{ borderRadius: '10px' }} value={jobTitle} onChange={e => setJobTitle(e.target.value)} />
+                            </div>
+                            <div className="form-group">
+                                <label style={{ fontWeight: '600', color: 'var(--dark-soft)', marginBottom: '8px', display: 'block' }}>{getTranslation(user?.language, 'department')}</label>
+                                <input className="form-control" style={{ borderRadius: '10px' }} value={department} onChange={e => setDepartment(e.target.value)} />
+                            </div>
+                            <div className="form-group">
+                                <label style={{ fontWeight: '600', color: 'var(--dark-soft)', marginBottom: '8px', display: 'block' }}>{getTranslation(user?.language, 'timezone')}</label>
+                                <select className="form-control" style={{ borderRadius: '10px' }} value={timezone} onChange={e => setTimezone(e.target.value)}>
+                                    <option value="UTC">UTC (GMT+0)</option>
+                                    <option value="CET">Central European Time (GMT+1)</option>
+                                    <option value="EET">Eastern European Time (GMT+2)</option>
+                                    <option value="AST">Arabia Standard Time (GMT+3)</option>
+                                    <option value="EAT">East Africa Time (GMT+3)</option>
+                                    <option value="GST">Gulf Standard Time (GMT+4)</option>
+                                    <option value="IST">India Standard Time (GMT+5:30)</option>
+                                    <option value="CST">China Standard Time (GMT+8)</option>
+                                    <option value="JST">Japan Standard Time (GMT+9)</option>
+                                    <option value="AEST">Australian Eastern Time (GMT+10)</option>
+                                    <option value="AST_NA">Atlantic Standard Time (GMT-4)</option>
+                                    <option value="EST">Eastern Time (GMT-5)</option>
+                                    <option value="CST_NA">Central Time (GMT-6)</option>
+                                    <option value="MST">Mountain Time (GMT-7)</option>
+                                    <option value="PST">Pacific Time (GMT-8)</option>
+                                    <option value="AKST">Alaska Time (GMT-9)</option>
+                                    <option value="HST">Hawaii-Aleutian Time (GMT-10)</option>
+                                </select>
+                            </div>
+
+                            {/* Live Timezone Clock Panel */}
+                            <div style={{ gridColumn: '1 / -1' }}>
+                                <div style={{
+                                    background: 'linear-gradient(135deg, rgba(99,102,241,0.08), rgba(139,92,246,0.08))',
+                                    border: '1px solid var(--primary-light)',
+                                    borderRadius: '14px',
+                                    padding: '20px 24px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '18px',
+                                    marginTop: '4px'
+                                }}>
+                                    <div style={{
+                                        width: '52px', height: '52px',
+                                        borderRadius: '14px',
+                                        background: 'var(--grad-primary)',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontSize: '26px',
+                                        flexShrink: 0,
+                                        boxShadow: '0 4px 14px rgba(99,102,241,0.35)'
+                                    }}>🕐</div>
+                                    <div style={{ flex: 1 }}>
+                                        <p style={{ margin: '0 0 4px 0', fontSize: '12px', fontWeight: '700', color: 'var(--primary)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                                            Current Time in Selected Timezone
+                                        </p>
+                                        <p style={{ margin: 0, fontSize: '17px', fontWeight: '800', color: 'var(--dark)', letterSpacing: '0.01em', fontVariantNumeric: 'tabular-nums' }}>
+                                            {timezoneTime || '—'}
+                                        </p>
+                                    </div>
+                                    <div style={{
+                                        background: 'var(--primary)',
+                                        color: 'white',
+                                        borderRadius: '8px',
+                                        padding: '4px 12px',
+                                        fontSize: '12px',
+                                        fontWeight: '800',
+                                        flexShrink: 0
+                                    }}>
+                                        {timezone.replace('_NA','')}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="form-group">
+                                <label style={{ fontWeight: '600', color: 'var(--dark-soft)', marginBottom: '8px', display: 'block' }}>{getTranslation(user?.language, 'preferred_language')}</label>
+                                <select className="form-control" style={{ borderRadius: '10px' }} value={language} onChange={e => setLanguage(e.target.value)}>
+                                    <option value="en">English</option>
+                                    <option value="fr">Français</option>
+                                    <option value="es">Español</option>
+                                    <option value="de">Deutsch</option>
+                                    <option value="am">Amharic (አማርኛ)</option>
+                                    <option value="zh">Chinese (中文)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="form-group" style={{ marginBottom: '30px' }}>
+                            <label style={{ fontWeight: '600', color: 'var(--dark-soft)', marginBottom: '8px', display: 'block' }}>{getTranslation(user?.language, 'professional_bio')}</label>
+                            <textarea 
+                                className="form-control" 
+                                style={{ borderRadius: '10px', height: '100px', resize: 'none' }} 
+                                value={bio} 
+                                onChange={e => setBio(e.target.value)}
+                                placeholder="Describe your role or department responsibilities..."
                             />
                         </div>
 
-                        <div className="form-group">
-                            <label>Email Address</label>
-                            <input
-                                type="email"
-                                className="form-control"
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                            />
+                        <div className="card" style={{ padding: '30px', border: '1px solid var(--primary)', background: 'rgba(99, 102, 241, 0.02)', marginBottom: '30px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '25px', paddingBottom: '15px', borderBottom: '1px solid var(--gray-light)' }}>
+                                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'var(--grad-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '15px', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)' }}>
+                                    <span style={{ fontSize: '24px' }}>🔐</span>
+                                </div>
+                                <div>
+                                    <h4 style={{ margin: 0, fontSize: '18px', color: 'var(--dark)' }}>{getTranslation(user?.language, 'security_password')}</h4>
+                                    <p style={{ margin: 0, fontSize: '12px', color: 'var(--gray)' }}>Update your account security credentials</p>
+                                </div>
+                            </div>
+                            
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+                                <div className="form-group">
+                                    <label style={{ fontSize: '13px', fontWeight: '700', color: 'var(--dark-soft)' }}>Current Password</label>
+                                    <input 
+                                        type="password" 
+                                        title="Current Password" 
+                                        className="form-control" 
+                                        style={{ background: 'var(--white)', borderRadius: '10px', border: '1px solid var(--primary)' }} 
+                                        value={currentPassword} 
+                                        onChange={e => setCurrentPassword(e.target.value)} 
+                                        placeholder="Required for changes" 
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label style={{ fontSize: '13px', fontWeight: '700', color: 'var(--dark-soft)' }}>New Password</label>
+                                    <input 
+                                        type="password" 
+                                        title="New Password" 
+                                        className="form-control" 
+                                        style={{ background: 'var(--white)', borderRadius: '10px' }} 
+                                        value={password} 
+                                        onChange={e => setPassword(e.target.value)} 
+                                        placeholder="Min. 8 characters" 
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label style={{ fontSize: '13px', fontWeight: '700', color: 'var(--dark-soft)' }}>Confirm New Password</label>
+                                    <input 
+                                        type="password" 
+                                        title="Confirm New Password" 
+                                        className="form-control" 
+                                        style={{ background: 'var(--white)', borderRadius: '10px' }} 
+                                        value={confirmPassword} 
+                                        onChange={e => setConfirmPassword(e.target.value)} 
+                                    />
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="form-group">
-                            <label>New Password (leave blank to keep current)</label>
-                            <input
-                                type="password"
-                                className="form-control"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Enter new password"
-                            />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '15px', marginBottom: '30px', border: '1px dashed var(--primary)' }}>
+                            <div>
+                                <h4 style={{ margin: 0 }}>🌓 {getTranslation(user?.language, 'appearance_mode')}</h4>
+                                <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: 'var(--gray)' }}>Toggle between light and dark visual themes.</p>
+                            </div>
+                            <button type="button" className="btn" onClick={toggleTheme} style={{ background: 'var(--white)', border: '1px solid var(--primary)', color: 'var(--primary)', fontWeight: '700', padding: '10px 20px', borderRadius: '12px' }}>
+                                Switch to {theme === 'light' ? 'Dark' : 'Light'} Mode
+                            </button>
                         </div>
 
-                        <div className="form-group">
-                            <label>Preferred Currency</label>
-                            <select className="form-control" value={currency} onChange={(e) => setCurrency(e.target.value)}>
-                                <option value="USD">USD - US Dollar</option>
-                                <option value="EUR">EUR - Euro</option>
-                                <option value="GBP">GBP - British Pound</option>
-                                <option value="ETB">ETB - Ethiopian Birr</option>
-                                <option value="KES">KES - Kenyan Shilling</option>
-                            </select>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <button type="submit" className="btn btn-primary" style={{ padding: '14px 32px', fontWeight: 'bold', borderRadius: '12px', fontSize: '16px' }}>
+                                {getTranslation(user?.language, 'update_everything')}
+                            </button>
                         </div>
-
-                        <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <input
-                                type="checkbox"
-                                checked={theme === 'dark'}
-                                onChange={toggleTheme}
-                                id="darkModeToggle"
-                            />
-                            <label htmlFor="darkModeToggle" style={{ margin: 0 }}>🌙 Dark Mode</label>
-                        </div>
-
-                        <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
-                            💾 Save Profile Settings
-                        </button>
                     </form>
                 </div>
             )}
 
+            {/* Security Tab */}
             {activeTab === 'security' && (
-                <div className="card">
-                    <h3 style={{ marginBottom: '20px' }}>🔐 QR Intelligence Security</h3>
-
-                    {!twoFactorEnabled && !qrCode && (
-                        <div>
-                            <p style={{ color: 'var(--gray)', marginBottom: '16px' }}>
-                                Replace manual codes with <b>Identity QR Scanning</b>. Secure your account with a visual key.
-                            </p>
-                            <button onClick={handleEnable2FA} className="btn btn-primary">
-                                🛡️ Enable QR Security
-                            </button>
+                <div className="card slide-up">
+                    <h3 style={{ marginBottom: '20px' }}>🛡️ Security & Sessions</h3>
+                    <div 
+                        className="card" 
+                        onClick={() => { if (!show2FAInput) { twoFactorEnabled ? handleDisable2FA() : handleEnable2FA() } }}
+                        style={{ padding: '25px', border: '1px solid var(--primary)', background: 'rgba(99, 102, 241, 0.02)', marginBottom: '30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: show2FAInput ? 'default' : 'pointer', transition: 'all 0.2s ease' }}
+                    >
+                        <div style={{ display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
+                            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'var(--grad-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginRight: '15px' }}>
+                                <span style={{ fontSize: '20px' }}>🔒</span>
+                            </div>
+                            <div>
+                                <h4 style={{ margin: 0, fontSize: '17px' }}>Two-Factor Authentication</h4>
+                                <p style={{ margin: '3px 0 0 0', fontSize: '13px', color: 'var(--gray)' }}>
+                                    Secure your account with a code sent to <b>{user?.email}</b>
+                                </p>
+                            </div>
                         </div>
-                    )}
-
-                    {qrCode && !twoFactorEnabled && (
-                        <div className="fade-in">
-                            <p style={{ marginBottom: '16px', fontWeight: '600' }}>
-                                Phase 1: Save your "Identity QR Card":
-                            </p>
-
-                            <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                                <div style={{ background: 'white', padding: '16px', borderRadius: '12px', boxShadow: 'var(--shadow-sm)', textAlign: 'center' }}>
-                                    <img src={qrCode} alt="2FA QR Code" style={{ maxWidth: '200px' }} />
-                                    <button
-                                        onClick={() => {
-                                            const link = document.createElement('a');
-                                            link.href = qrCode;
-                                            link.download = `Finsight_Identity_QR_${user.name.replace(/\s/g, '_')}.png`;
-                                            link.click();
-                                        }}
-                                        className="btn btn-sm"
-                                        style={{ width: '100%', marginTop: '8px', fontSize: '12px', background: 'var(--gray-light)' }}
-                                    >
-                                        💾 Download QR Card
-                                    </button>
-                                </div>
-
-                                <div style={{ flex: 1, minWidth: '300px' }}>
-                                    <h4 style={{ marginBottom: '12px' }}>Phase 2: Verify & Activate</h4>
-                                    <p style={{ fontSize: '14px', color: 'var(--gray)', marginBottom: '16px' }}>
-                                        Scan the QR code above using the built-in web scanner to verify your setup.
-                                    </p>
-
-                                    <div style={{ marginBottom: '16px' }}>
-                                        <button
-                                            onClick={() => setShowScanner(!showScanner)}
-                                            className="btn btn-sm"
-                                            style={{ background: showScanner ? 'var(--danger)' : 'var(--primary)', color: 'white', width: '100%' }}
-                                        >
-                                            {showScanner ? '❌ Close Web Scanner' : '📷 Open Web Scanner to Verify'}
-                                        </button>
-                                    </div>
-
-                                    {showScanner ? (
-                                        <div id="reader" style={{ width: '100%', border: 'none', borderRadius: '12px', overflow: 'hidden' }}></div>
-                                    ) : (
-                                        <div className="form-group">
-                                            <label>Manual Entry (6-Digit Code)</label>
-                                            <input
-                                                type="text"
-                                                className="form-control"
-                                                value={twoFAToken}
-                                                onChange={(e) => setTwoFAToken(e.target.value)}
-                                                placeholder="123456"
-                                                maxLength={6}
-                                            />
+                        
+                        <div style={{ marginLeft: '20px' }} onClick={e => e.stopPropagation()}>
+                            {show2FAInput ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', alignItems: 'center', background: 'var(--white)', padding: '20px', borderRadius: '12px', border: '1px solid var(--primary-light)', boxShadow: 'var(--shadow-md)' }}>
+                                    {qrCode && (
+                                        <div style={{ textAlign: 'center' }}>
+                                            <p style={{ fontSize: '12px', fontWeight: 'bold', marginBottom: '10px' }}>Scan this with Google Authenticator</p>
+                                            <img src={qrCode} alt="2FA QR Code" style={{ width: '150px', height: '150px', border: '1px solid var(--gray-light)', padding: '5px', borderRadius: '8px' }} />
                                         </div>
                                     )}
-
-                                    {!showScanner && (
-                                        <button onClick={handleVerify2FA} className="btn btn-primary" style={{ width: '100%', marginTop: '12px' }}>
-                                            ✅ Complete Activation
+                                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                                        <div style={{ position: 'relative' }}>
+                                            <input 
+                                                type="text" 
+                                                placeholder="Code" 
+                                                value={twoFactorToken} 
+                                                onChange={e => setTwoFactorToken(e.target.value)}
+                                                style={{ padding: '10px', borderRadius: '8px', border: '2px solid var(--primary)', width: '100px', fontWeight: 'bold', textAlign: 'center' }}
+                                            />
+                                        </div>
+                                        <button className="btn btn-primary" onClick={handleVerify2FA}>Verify</button>
+                                        <button className="btn" onClick={() => { setShow2FAInput(false); setQrCode(null); }}>Cancel</button>
+                                    </div>
+                                    <p style={{ fontSize: '10px', color: 'var(--gray)', textAlign: 'center' }}>
+                                        {twoFactorTypeSetting === 'email' ? 'Check your email for a 6-digit code.' : 'Enter the code from your app.'}
+                                    </p>
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', gap: '10px' }}>
+                                    {!twoFactorEnabled && (
+                                        <>
+                                            <button 
+                                                className="btn" 
+                                                onClick={() => handleEnable2FA('email')}
+                                                style={{ border: '1px solid var(--primary)', color: 'var(--primary)', fontWeight: 'bold' }}
+                                            >
+                                                Use Email
+                                            </button>
+                                            <button 
+                                                className="btn btn-primary" 
+                                                onClick={() => handleEnable2FA('totp')}
+                                                style={{ fontWeight: 'bold' }}
+                                            >
+                                                Use App (TOTP)
+                                            </button>
+                                        </>
+                                    )}
+                                    {twoFactorEnabled && (
+                                        <button 
+                                            className="btn" 
+                                            onClick={handleDisable2FA}
+                                            style={{ background: '#ef4444', color: 'white', fontWeight: 'bold' }}
+                                        >
+                                            Disable 2FA
                                         </button>
                                     )}
                                 </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Recovery Codes Modal-like section */}
+                    {recoveryCodes && (
+                        <div style={{ background: '#fffbeb', border: '2px dashed #f59e0b', padding: '25px', borderRadius: '15px', marginBottom: '30px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+                                <span style={{ fontSize: '24px' }}>⚠️</span>
+                                <h4 style={{ margin: 0, color: '#92400e' }}>Save Your Recovery Codes!</h4>
+                            </div>
+                            <p style={{ fontSize: '13px', color: '#b45309', marginBottom: '20px' }}>
+                                If you lose access to your device, these codes are the ONLY way to get back into your account. Keep them safe and private.
+                            </p>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginBottom: '20px' }}>
+                                {recoveryCodes.map((code, i) => (
+                                    <code key={i} style={{ background: 'white', padding: '8px', borderRadius: '6px', textAlign: 'center', fontWeight: 'bold', fontSize: '12px', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)' }}>
+                                        {code}
+                                    </code>
+                                ))}
+                            </div>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button className="btn btn-primary" style={{ background: '#92400e', border: 'none' }} onClick={() => {
+                                    const text = recoveryCodes.join('\n');
+                                    const blob = new Blob([text], { type: 'text/plain' });
+                                    const url = window.URL.createObjectURL(blob);
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = 'finsight_recovery_codes.txt';
+                                    a.click();
+                                }}>Download Codes</button>
+                                <button className="btn" style={{ background: 'white', color: '#92400e', border: '1px solid #92400e' }} onClick={() => setRecoveryCodes(null)}>I've Saved Them</button>
                             </div>
                         </div>
                     )}
 
-                    {twoFactorEnabled && (
-                        <div className="fade-in">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '24px', padding: '16px', background: 'var(--success-soft)', borderRadius: '12px', border: '1px solid var(--success)' }}>
-                                <span style={{ fontSize: '24px' }}>🛡️</span>
-                                <div>
-                                    <h4 style={{ color: 'var(--success-dark)', margin: 0 }}>QR Security is Active</h4>
-                                    <p style={{ fontSize: '13px', margin: '4px 0 0 0' }}>Your account is protected with Identity QR Authentication.</p>
-                                </div>
-                            </div>
-
-                            <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '40px', marginBottom: '40px' }}>
-                                <div id="identity-card-container">
-                                    <IdentityCard user={user} qrCode={qrCode} />
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                                    <h3>🖨️ Employee Identity Card</h3>
-                                    <p style={{ color: 'var(--gray)', marginBottom: '24px' }}>
-                                        Print your official employee registration card. This card contains your unique visual identity key required for secure login.
-                                    </p>
-                                    <button onClick={handlePrintCard} className="btn btn-primary" style={{ width: 'fit-content', padding: '12px 24px' }}>
-                                        🖨️ Print Identity Card
-                                    </button>
-                                </div>
-                            </div>
-
-                            <hr style={{ margin: '40px 0', border: 'none', borderTop: '1px solid var(--gray-light)' }} />
-
-                            <h4 style={{ color: 'var(--danger)', marginBottom: '16px' }}>Danger Zone</h4>
-                            <div className="form-group">
-                                <label>Your Admin Password (to disable)</label>
-                                <input
-                                    type="password"
-                                    className="form-control"
-                                    value={passwordFor2FA}
-                                    onChange={(e) => setPasswordFor2FA(e.target.value)}
-                                />
-                            </div>
-
-                            <div className="form-group">
-                                <label>Current Verification Code</label>
-                                <input
-                                    type="text"
-                                    className="form-control"
-                                    value={twoFAToken}
-                                    onChange={(e) => setTwoFAToken(e.target.value)}
-                                    placeholder="123456"
-                                    maxLength={6}
-                                />
-                            </div>
-
-                            <button onClick={handleDisable2FA} className="btn" style={{ background: 'var(--danger)', color: 'white', width: '100%' }}>
-                                ⚠️ Disable QR Security
-                            </button>
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {activeTab === 'notifications' && (
-                <div className="card">
-                    <h3 style={{ marginBottom: '20px' }}>🔔 Notification Preferences</h3>
-                    <p style={{ color: 'var(--gray)', marginBottom: '24px' }}>
-                        Choose which emails you want to receive
-                    </p>
-
-                    {Object.entries({
-                        budgetAlerts: '💰 Budget Alerts (80% and 100% warnings)',
-                        expenseApproved: '✅ Expense Approved Notifications',
-                        expenseRejected: '❌ Expense Rejected Notifications',
-                        weeklyReport: '📅 Weekly Spending Summary',
-                        monthlyReport: '📊 Monthly Financial Report'
-                    }).map(([key, label]) => (
-                        <div key={key} className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <input
-                                type="checkbox"
-                                checked={notificationPrefs[key]}
-                                onChange={(e) => setNotificationPrefs({ ...notificationPrefs, [key]: e.target.checked })}
-                                id={key}
-                            />
-                            <label htmlFor={key} style={{ margin: 0 }}>{label}</label>
-                        </div>
-                    ))}
-
-                    <button onClick={handleNotificationUpdate} className="btn btn-primary" style={{ marginTop: '16px' }}>
-                        💾 Save Preferences
-                    </button>
-                </div>
-            )}
-
-            {activeTab === 'advanced' && (
-                <div className="card">
-                    <h3 style={{ marginBottom: '20px' }}>⚙️ User Preferences</h3>
-
-                    <div className="form-group">
-                        <label>Fiscal Year Start Month</label>
-                        <select className="form-control" value={fiscalYearStart} onChange={(e) => setFiscalYearStart(parseInt(e.target.value))}>
-                            {monthNames.map((month, index) => (
-                                <option key={index + 1} value={index + 1}>{month}</option>
-                            ))}
-                        </select>
-                        <small style={{ color: 'var(--gray)', display: 'block', marginTop: '8px' }}>
-                            Your annual reports will run from {monthNames[fiscalYearStart - 1]} to {monthNames[(fiscalYearStart + 10) % 12]}
-                        </small>
-                    </div>
-
-                    <div className="form-group">
-                        <label>Default Expense Category</label>
-                        <select className="form-control" value={defaultCategory} onChange={(e) => setDefaultCategory(e.target.value)}>
-                            <option value="">-- No Default --</option>
-                            <option value="Expense">📑 General Expense</option>
-                            <option value="Food">🍎 Food & Dining</option>
-                            <option value="Transport">🚗 Transport</option>
-                            <option value="Housing">🏠 Housing</option>
-                            <option value="Utilities">💧 Water & Electricity</option>
-                            <option value="Clothing">👕 Clothing</option>
-                            <option value="Shopping">🛍️ Shopping</option>
-                            <option value="Entertainment">🎬 Entertainment</option>
-                            <option value="Health">🏥 Health</option>
-                            <option value="Education">📚 Education</option>
-                            <option value="Travel">✈️ Travel</option>
-                            <option value="Other">✨ Other</option>
-                        </select>
-                        <small style={{ color: 'var(--gray)', display: 'block', marginTop: '8px' }}>
-                            This will auto-select when adding new expenses
-                        </small>
-                    </div>
-
-                    <div className="form-group">
-                        <label>Default Budget Category</label>
-                        <select className="form-control" value={defaultBudgetCategory} onChange={(e) => setDefaultBudgetCategory(e.target.value)}>
-                            <option value="">-- No Default --</option>
-                            <option value="Expense">📑 General Expense</option>
-                            <option value="Food">🍎 Food & Dining</option>
-                            <option value="Transport">🚗 Transport</option>
-                            <option value="Housing">🏠 Housing</option>
-                            <option value="Utilities">💧 Water & Electricity</option>
-                            <option value="Clothing">👕 Clothing</option>
-                            <option value="Shopping">🛍️ Shopping</option>
-                            <option value="Entertainment">🎬 Entertainment</option>
-                            <option value="Health">🏥 Health</option>
-                            <option value="Education">📚 Education</option>
-                            <option value="Travel">✈️ Travel</option>
-                            <option value="Other">✨ Other</option>
-                        </select>
-                        <small style={{ color: 'var(--gray)', display: 'block', marginTop: '8px' }}>
-                            This will auto-select when setting new budgets
-                        </small>
-                    </div>
-
-                    <div className="form-group">
-                        <label>Default Currency for New Expenses</label>
-                        <select className="form-control" value={defaultCurrency} onChange={(e) => setDefaultCurrency(e.target.value)}>
-                            <option value="USD">USD</option>
-                            <option value="EUR">EUR</option>
-                            <option value="GBP">GBP</option>
-                            <option value="ETB">ETB</option>
-                            <option value="KES">KES</option>
-                        </select>
-                    </div>
-
-                    <button onClick={handleAdvancedPreferencesUpdate} className="btn btn-primary">
-                        💾 Save Advanced Settings
-                    </button>
-                </div>
-            )}
-
-            {activeTab === 'organization' && user?.role === 'admin' && (
-                <div className="card">
-                    <h3 style={{ marginBottom: '20px' }}>🏢 Organization Policies</h3>
-                    <p style={{ color: 'var(--gray)', marginBottom: '24px' }}>
-                        Configure company-wide rules and modules
-                    </p>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '24px' }}>
-                        {/* Expense Module */}
-                        <div style={{ padding: '20px', background: 'var(--gray-light)', borderRadius: '12px', border: orgSettings.expenseModuleEnabled ? '2px solid var(--primary-soft)' : '2px solid transparent' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                                <h4 style={{ margin: 0 }}>📊 Expense Module</h4>
-                                <input
-                                    type="checkbox"
-                                    checked={orgSettings.expenseModuleEnabled}
-                                    onChange={(e) => setOrgSettings({ ...orgSettings, expenseModuleEnabled: e.target.checked })}
-                                    style={{ width: '20px', height: '20px' }}
-                                />
-                            </div>
-
-                            <div style={{ opacity: orgSettings.expenseModuleEnabled ? 1 : 0.5, pointerEvents: orgSettings.expenseModuleEnabled ? 'all' : 'none' }}>
-                                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={orgSettings.requireReceipts}
-                                        onChange={(e) => setOrgSettings({ ...orgSettings, requireReceipts: e.target.checked })}
-                                        id="requireReceipts"
-                                    />
-                                    <label htmlFor="requireReceipts" style={{ margin: 0 }}>📸 Require Receipts</label>
-                                </div>
-
-                                <div className="form-group">
-                                    <label>Auto-Approve Expenses Below ($)</label>
-                                    <input
-                                        type="number"
-                                        className="form-control"
-                                        value={orgSettings.autoApproveLimit}
-                                        onChange={(e) => setOrgSettings({ ...orgSettings, autoApproveLimit: e.target.value })}
-                                        placeholder="0 = No auto-approval"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Budget Module */}
-                        <div style={{ padding: '20px', background: 'var(--gray-light)', borderRadius: '12px', border: orgSettings.budgetModuleEnabled ? '2px solid var(--primary-soft)' : '2px solid transparent' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                                <h4 style={{ margin: 0 }}>💰 Budget Module</h4>
-                                <input
-                                    type="checkbox"
-                                    checked={orgSettings.budgetModuleEnabled}
-                                    onChange={(e) => setOrgSettings({ ...orgSettings, budgetModuleEnabled: e.target.checked })}
-                                    style={{ width: '20px', height: '20px' }}
-                                />
-                            </div>
-
-                            <div style={{ opacity: orgSettings.budgetModuleEnabled ? 1 : 0.5, pointerEvents: orgSettings.budgetModuleEnabled ? 'all' : 'none' }}>
-                                <div className="form-group">
-                                    <label>Auto-Approve Budgets Below ($)</label>
-                                    <input
-                                        type="number"
-                                        className="form-control"
-                                        value={orgSettings.autoApproveBudgetLimit}
-                                        onChange={(e) => setOrgSettings({ ...orgSettings, autoApproveBudgetLimit: e.target.value })}
-                                        placeholder="0 = No auto-approval"
-                                    />
-                                    <small style={{ color: 'var(--gray)', display: 'block', marginTop: '8px' }}>
-                                        Budgets under this amount will be approved automatically.
-                                    </small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', background: 'var(--gray-light)', borderRadius: '8px' }}>
-                        <input
-                            type="checkbox"
-                            checked={orgSettings.allowMultiCurrency}
-                            onChange={(e) => setOrgSettings({ ...orgSettings, allowMultiCurrency: e.target.checked })}
-                            id="allowMultiCurrency"
-                        />
-                        <label htmlFor="allowMultiCurrency" style={{ margin: 0 }}>🌍 Global Setting: Allow employees to use multiple currencies</label>
-                    </div>
-
-                    <button onClick={handleOrgSettingsUpdate} className="btn btn-primary" style={{ width: '100%', marginTop: '12px' }}>
-                        Apply Organization Module Settings
-                    </button>
-                </div>
-            )}
-
-            {activeTab === 'data' && (
-                <div className="card">
-                    <h3 style={{ marginBottom: '20px' }}>📦 Data Management</h3>
-
-                    <div style={{ marginBottom: '24px', padding: '16px', background: 'var(--gray-light)', borderRadius: '8px' }}>
-                        <h4 style={{ marginBottom: '12px' }}>Export Your Data</h4>
-                        <p style={{ color: 'var(--gray)', marginBottom: '12px' }}>
-                            Download all your expenses, budgets, and settings as a CSV file
-                        </p>
-                        <button onClick={handleExportData} className="btn" style={{ background: 'var(--success)', color: 'white' }}>
-                            📥 Export Data (CSV)
-                        </button>
-                    </div>
-
-                    <div style={{ padding: '16px', background: '#fff7ed', borderRadius: '8px', border: '1px solid #f97316', marginBottom: '24px' }}>
-                        <h4 style={{ marginBottom: '12px', color: '#c2410c' }}>🧹 Reset Account Data</h4>
-                        <p style={{ color: '#9a3412', marginBottom: '12px' }}>
-                            Wipe all your expense entries and budgets while keeping your account settings and profile.
-                        </p>
-                        <button onClick={handleClearAllData} className="btn" style={{ background: '#f97316', color: 'white' }}>
-                            Clear All Expense Data
-                        </button>
-                    </div>
-
-                    <div style={{ padding: '16px', background: '#fee2e2', borderRadius: '8px', border: '1px solid var(--danger)' }}>
-                        <h4 style={{ marginBottom: '12px', color: 'var(--danger)' }}>⚠️ Danger Zone</h4>
-                        <p style={{ color: '#7f1d1d', marginBottom: '12px' }}>
-                            These actions are permanent and cannot be undone
-                        </p>
-                        <button
-                            onClick={() => {
-                                if (window.confirm('This will delete ALL your data and YOUR ACCOUNT permanently. Are you absolutely sure?')) {
-                                    toast.info('Account deletion is not yet implemented for this demo');
-                                }
-                            }}
-                            className="btn"
-                            style={{ background: 'var(--danger)', color: 'white' }}
-                        >
-                            🗑️ Delete Account Permanently
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {activeTab === 'audit' && user?.role === 'admin' && (
-                <div className="card">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                        <h3>📋 Organization Audit Logs</h3>
-                        <button onClick={fetchAuditLogs} className="btn" style={{ fontSize: '13px', padding: '6px 12px' }}>
-                            🔄 Refresh
+                        <h4 style={{ margin: 0 }}>Active Sessions</h4>
+                        <button 
+                            className="btn btn-primary" 
+                            style={{ padding: '8px 16px', fontSize: '12px', background: 'var(--danger)', border: 'none' }}
+                            onClick={handleRevokeAllOtherSessions}
+                        >
+                            Revoke All Other Sessions
                         </button>
                     </div>
-                    <p style={{ color: 'var(--gray)', marginBottom: '20px' }}>
-                        Last 100 security and administrative actions in your organization.
-                    </p>
-
-                    <div style={{ overflowX: 'auto' }}>
-                        <table className="table">
-                            <thead>
-                                <tr>
-                                    <th>Timestamp</th>
-                                    <th>User</th>
-                                    <th>Action</th>
-                                    <th>Target</th>
-                                    <th>IP Address</th>
-                                </tr>
-                            </thead>
+                    <div className="table-responsive" style={{ marginBottom: '40px' }}>
+                        <table>
+                            <thead><tr><th>Device / Browser</th><th>IP Address</th><th>Last Active</th><th>Action</th></tr></thead>
                             <tbody>
-                                {loadingAudit ? (
-                                    <tr><td colSpan="5" style={{ textAlign: 'center', padding: '40px' }}>Loading logs...</td></tr>
-                                ) : auditLogs.length === 0 ? (
-                                    <tr><td colSpan="5" style={{ textAlign: 'center', padding: '40px' }}>No audit logs found.</td></tr>
-                                ) : auditLogs.map((log, index) => (
-                                    <tr key={log.id || index}>
-                                        <td style={{ fontSize: '13px' }}>{new Date(log.createdAt).toLocaleString()}</td>
+                                {sessions.map(s => (
+                                    <tr key={s.id}>
                                         <td>
-                                            <div style={{ fontWeight: '600' }}>{log.User?.name || 'Unknown User'}</div>
-                                            <div style={{ fontSize: '12px', color: 'var(--gray)' }}>{log.User?.email}</div>
+                                            {s.browser} on {s.os}
+                                            {s.id === currentSessionId && <span style={{ marginLeft: '8px', padding: '2px 6px', background: 'var(--success)', color: 'white', borderRadius: '4px', fontSize: '10px' }}>Current</span>}
                                         </td>
+                                        <td>{s.ipAddress}</td>
+                                        <td>{new Date(s.createdAt).toLocaleString()}</td>
                                         <td>
-                                            <span style={{
-                                                padding: '4px 8px',
-                                                borderRadius: '4px',
-                                                fontSize: '11px',
-                                                fontWeight: '800',
-                                                background: log.action.includes('DELETE') || log.action.includes('REJECT') ? '#fee2e2' : '#e0e7ff',
-                                                color: log.action.includes('DELETE') || log.action.includes('REJECT') ? '#991b1b' : '#3730a3',
-                                                textTransform: 'uppercase'
-                                            }}>
-                                                {log.action.replace(/_/g, ' ')}
-                                            </span>
-                                        </td>
-                                        <td style={{ fontSize: '13px' }}>
-                                            {log.targetType}: <span style={{ fontFamily: 'monospace' }}>{log.targetId ? log.targetId.substring(0, 8) : 'N/A'}</span>
-                                        </td>
-                                        <td style={{ fontSize: '12px', color: 'var(--gray)', fontFamily: 'monospace' }}>
-                                            {log.ipAddress || 'Internal'}
+                                            {s.id !== currentSessionId && (
+                                                <button 
+                                                    onClick={() => handleRevokeSpecificSession(s.id)}
+                                                    style={{ color: 'var(--danger)', background: 'none', border: 'none', fontWeight: 'bold', cursor: 'pointer' }}
+                                                >
+                                                    Revoke
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
+                    </div>
+
+                    <h4 style={{ marginBottom: '20px' }}>Recent Security Activity</h4>
+                    <div className="table-responsive">
+                        <table style={{ borderCollapse: 'separate', borderSpacing: '0 8px' }}>
+                            <thead>
+                                <tr style={{ background: 'var(--light)', color: 'var(--gray)', fontSize: '12px' }}>
+                                    <th style={{ padding: '12px', borderRadius: '8px 0 0 8px' }}>Action</th>
+                                    <th style={{ padding: '12px' }}>Details</th>
+                                    <th style={{ padding: '12px' }}>IP Address</th>
+                                    <th style={{ padding: '12px', borderRadius: '0 8px 8px 0' }}>Time</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {securityLogs.map(l => (
+                                    <tr key={l.id} style={{ background: 'var(--white)', boxShadow: 'var(--shadow-sm)' }}>
+                                        <td style={{ padding: '12px', borderBottom: '1px solid var(--gray-light)' }}>
+                                            <span style={{ 
+                                                padding: '4px 8px', 
+                                                borderRadius: '6px', 
+                                                fontSize: '11px', 
+                                                fontWeight: '800',
+                                                background: l.action.includes('Failed') ? '#fee2e2' : '#f0fdf4',
+                                                color: l.action.includes('Failed') ? '#ef4444' : '#22c55e'
+                                            }}>
+                                                {l.action}
+                                            </span>
+                                        </td>
+                                        <td style={{ padding: '12px', borderBottom: '1px solid var(--gray-light)', fontSize: '13px' }}>
+                                            {l.details ? JSON.stringify(l.details) : 'No extra details'}
+                                        </td>
+                                        <td style={{ padding: '12px', borderBottom: '1px solid var(--gray-light)', fontSize: '13px' }}>{l.ipAddress}</td>
+                                        <td style={{ padding: '12px', borderBottom: '1px solid var(--gray-light)', fontSize: '12px', color: 'var(--gray)' }}>
+                                            {new Date(l.createdAt).toLocaleString()}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Notifications Tab */}
+            {activeTab === 'notifications' && (
+                <div className="card slide-up">
+                    <h3 style={{ marginBottom: '20px' }}>🔔 Notification Preferences</h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                        {[
+                            { key: 'budgetAlerts', label: 'Budget Threshold Alerts', desc: 'Notify me when budgets reach a certain percentage.' },
+                            { key: 'expenseApproved', label: 'Expense Approved', desc: 'Receive a notification when your expense is approved.' },
+                            { key: 'expenseRejected', label: 'Expense Rejected', desc: 'Get notified if an expense needs correction.' },
+                            { key: 'weeklyReport', label: 'Weekly Summary', desc: 'Email me a weekly summary of my spending.' }
+                        ].map(item => (
+                            <div key={item.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', border: '1px solid var(--gray-light)', borderRadius: '12px' }}>
+                                <div>
+                                    <h4 style={{ margin: 0 }}>{item.label}</h4>
+                                    <p style={{ margin: '3px 0 0 0', fontSize: '12px', color: 'var(--gray)' }}>{item.desc}</p>
+                                </div>
+                                <input type="checkbox" checked={notifPrefs[item.key]} onChange={e => setNotifPrefs({...notifPrefs, [item.key]: e.target.checked})} style={{ width: '20px', height: '20px' }} />
+                            </div>
+                        ))}
+                        <div style={{ marginTop: '10px' }}>
+                            <label>Budget Alert Threshold ({budgetThreshold}%)</label>
+                            <input type="range" min="50" max="100" value={budgetThreshold} onChange={e => setBudgetThreshold(e.target.value)} style={{ width: '100%', marginTop: '10px' }} />
+                        </div>
+                        <button onClick={handleNotifUpdate} className="btn btn-primary" style={{ width: '100%', marginTop: '15px' }}>Update Notifications</button>
+                    </div>
+                </div>
+            )}
+
+            {/* Advanced Tab */}
+            {activeTab === 'advanced' && (
+                <div className="card slide-up">
+                    <h3 style={{ marginBottom: '20px' }}>⚙️ {getTranslation(user?.language, 'advanced_preferences')}</h3>
+                    <div className="form-group">
+                        <label>Fiscal Year Start Month</label>
+                        <select className="form-control" value={fiscalYearStart} onChange={e => setFiscalYearStart(e.target.value)}>
+                            {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map((m, i) => <option key={m} value={i+1}>{m}</option>)}
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label>{getTranslation(user?.language, 'preferred_language')}</label>
+                        <select className="form-control" value={language} onChange={e => setLanguage(e.target.value)}>
+                            <option value="en">English</option>
+                            <option value="es">Español</option>
+                            <option value="fr">Français</option>
+                            <option value="de">Deutsch</option>
+                            <option value="am">Amharic (አማርኛ)</option>
+                            <option value="zh">Chinese (中文)</option>
+                        </select>
+                    </div>
+                    <div className="form-group">
+                        <label>{getTranslation(user?.language, 'primary_currency')}</label>
+                        <select className="form-control" value={defaultCurrency} onChange={e => setDefaultCurrency(e.target.value)}>
+                            <option value="USD">USD ($)</option>
+                            <option value="EUR">EUR (€)</option>
+                            <option value="GBP">GBP (£)</option>
+                        </select>
+                    </div>
+                    <button onClick={handleAdvancedUpdate} className="btn btn-primary" style={{ width: '100%' }}>{getTranslation(user?.language, 'apply_preferences')}</button>
+                </div>
+            )}
+
+            {/* API Keys Tab */}
+            {activeTab === 'api' && (
+                <div className="card slide-up">
+                    <h3 style={{ marginBottom: '20px' }}>🔑 API Access</h3>
+                    <form onSubmit={handleCreateKey} style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                        <input className="form-control" placeholder="Key Name" value={newKeyName} onChange={e => setNewKeyName(e.target.value)} required />
+                        <button type="submit" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>+ Generate</button>
+                    </form>
+                    {generatedKey && (
+                        <div style={{ background: '#fffbeb', padding: '15px', borderRadius: '10px', border: '1px solid #fef3c7', marginBottom: '20px' }}>
+                            <p style={{ fontWeight: '700', color: '#92400e', margin: '0 0 10px 0' }}>⚠️ Copy your key now:</p>
+                            <code style={{ background: 'white', padding: '5px 10px', borderRadius: '5px', display: 'block', wordBreak: 'break-all' }}>{generatedKey}</code>
+                        </div>
+                    )}
+                    <div className="table-responsive">
+                        <table>
+                            <thead><tr><th>Name</th><th>Created</th><th>Last Used</th><th>Action</th></tr></thead>
+                            <tbody>
+                                {apiKeys.map(k => (
+                                    <tr key={k.id}>
+                                        <td>{k.name}</td>
+                                        <td>{new Date(k.createdAt).toLocaleDateString()}</td>
+                                        <td>{k.lastUsed ? new Date(k.lastUsed).toLocaleDateString() : 'Never'}</td>
+                                        <td><button onClick={() => handleRevokeKey(k.id)} style={{ color: 'var(--danger)', background: 'none', border: 'none', fontWeight: 'bold' }}>Revoke</button></td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Integrations Tab */}
+            {activeTab === 'integrations' && (
+                <div className="card slide-up">
+                    <h3 style={{ marginBottom: '20px' }}>🔌 Integration Hub</h3>
+                    
+                    {/* Bank Integration (Plaid) */}
+                    <h4 style={{ marginBottom: '15px', color: 'var(--dark-soft)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>🏦 Bank Connections</h4>
+                    <BankIntegration />
+
+                    {/* Other Integrations */}
+                    <h4 style={{ marginBottom: '15px', marginTop: '30px', color: 'var(--dark-soft)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>📱 Third-Party Apps</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                        {[
+                            { name: 'Slack', url: 'https://slack.com', color: '#4A154B', category: 'Communication' },
+                            { name: 'QuickBooks', url: 'https://quickbooks.com', color: '#2CA01C', category: 'Accounting' },
+                            { name: 'Zapier', url: 'https://zapier.com', color: '#FF4A00', category: 'Automation' },
+                            { name: 'Microsoft Teams', url: 'https://teams.com', color: '#6264A7', category: 'Communication' },
+                            { name: 'Google Drive', url: 'https://google.com/drive', color: '#4285F4', category: 'Storage' },
+                            { name: 'Dropbox', url: 'https://dropbox.com', color: '#0061FF', category: 'Storage' },
+                            { name: 'Xero', url: 'https://xero.com', color: '#13B5EA', category: 'Accounting' },
+                            { name: 'Notion', url: 'https://notion.so', color: '#000000', category: 'Productivity' }
+                        ].map(item => (
+                            <div key={item.name} className="integration-card" style={{ padding: '24px', border: '1px solid var(--gray-light)', borderRadius: '20px', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', background: 'var(--white)', position: 'relative', overflow: 'hidden' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px' }}>
+                                    <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: `${item.color}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: item.color, fontWeight: '900', fontSize: '20px' }}>
+                                        {item.name.charAt(0)}
+                                    </div>
+                                    <div>
+                                        <h4 style={{ margin: 0, fontSize: '18px' }}>{item.name}</h4>
+                                        <span style={{ fontSize: '12px', color: 'var(--gray)', fontWeight: '600' }}>{item.category}</span>
+                                    </div>
+                                </div>
+                                <button className="btn" style={{ background: 'var(--light)', border: '1px solid var(--gray-light)', width: '100%', fontWeight: '700', borderRadius: '10px', color: 'var(--dark-soft)' }} onClick={() => handleConnect(item.name, item.url)}>
+                                    Configure
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Organization Tab (Admin only) */}
+            {activeTab === 'organization' && user?.role === 'admin' && (
+                <div className="card slide-up">
+                    <h3 style={{ marginBottom: '20px' }}>🏢 Organization Control</h3>
+                    <div style={{ padding: '20px', background: 'var(--light)', borderRadius: '15px', marginBottom: '20px' }}>
+                        <h4>🎨 Branding</h4>
+                        <div className="form-group">
+                            <label>Company Logo</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginTop: '10px' }}>
+                                <div style={{ width: '80px', height: '80px', background: 'white', borderRadius: '12px', border: '2px dashed var(--gray-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                                    {branding.logoUrl ? <img src={branding.logoUrl} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="Logo" /> : <span style={{ fontSize: '24px' }}>🏢</span>}
+                                </div>
+                                <div>
+                                    <input type="file" id="logo-upload" style={{ display: 'none' }} onChange={handleLogoUpload} accept="image/*" />
+                                    <label htmlFor="logo-upload" className="btn" style={{ background: 'var(--white)', border: '1px solid var(--gray-light)', color: 'var(--dark)', cursor: 'pointer' }}>Change Logo</label>
+                                    <p style={{ fontSize: '11px', color: 'var(--gray)', marginTop: '5px' }}>JPG, PNG or SVG. Max 2MB.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="form-group"><label>Logo URL (Manual Override)</label><input className="form-control" value={branding.logoUrl} onChange={e => setBranding({...branding, logoUrl: e.target.value})} style={{ color: 'var(--dark-soft)' }} /></div>
+                        <div className="form-group"><label>Theme Color</label><input type="color" value={branding.primaryColor} onChange={e => setBranding({...branding, primaryColor: e.target.value})} style={{ display: 'block', width: '100%', height: '40px', border: 'none', background: 'none' }} /></div>
+                    </div>
+                    <div className="form-group"><label>Auto-Approve Limit ($)</label><input type="number" className="form-control" value={orgSettings.autoApproveLimit} onChange={e => setOrgSettings({...orgSettings, autoApproveLimit: e.target.value})} style={{ color: 'var(--dark-soft)' }} /></div>
+                    <button onClick={handleOrgUpdate} className="btn btn-primary" style={{ width: '100%' }}>Save Org Policies</button>
+                </div>
+            )}
+
+            {/* Audit Logs Tab (Admin only) */}
+            {activeTab === 'audit' && user?.role === 'admin' && (
+                <div className="card slide-up">
+                    <h3 style={{ marginBottom: '20px' }}>📜 Audit Trail</h3>
+                    <div className="table-responsive">
+                        <table>
+                            <thead><tr><th>Date</th><th>User</th><th>Action</th><th>Details</th></tr></thead>
+                            <tbody>
+                                {auditLogs.map(l => (
+                                    <tr key={l.id}>
+                                        <td>{new Date(l.createdAt).toLocaleString()}</td>
+                                        <td>{l.User?.name || 'System'}</td>
+                                        <td><span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>{l.action}</span></td>
+                                        <td style={{ fontSize: '12px' }}>{JSON.stringify(l.details)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+            {/* Data Tab */}
+            {activeTab === 'data' && (
+                <div className="card slide-up">
+                    <h3 style={{ marginBottom: '20px' }}>💾 Data & Backup</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                        <div style={{ padding: '20px', border: '1px solid var(--gray-light)', borderRadius: '15px' }}>
+                            <h4>📥 Export Backup</h4>
+                            <p style={{ fontSize: '13px', color: 'var(--gray)', marginBottom: '15px' }}>Download a structural snapshot of your financial records.</p>
+                            <button className="btn btn-primary" style={{ width: '100%' }} onClick={handleExportData}>Generate JSON Backup</button>
+                        </div>
+                        <div style={{ padding: '20px', border: '1px solid var(--success)', borderRadius: '15px' }}>
+                            <h4>📤 Data Restore</h4>
+                            <p style={{ fontSize: '13px', color: 'var(--gray)', marginBottom: '15px' }}>Upload a JSON backup file to restore your records.</p>
+                            <input type="file" id="restore-file" style={{ display: 'none' }} onChange={handleRestoreData} />
+                            <label htmlFor="restore-file" className="btn" style={{ background: 'var(--success)', color: 'white', width: '100%', cursor: 'pointer', display: 'flex', justifyContent: 'center' }}>Upload & Restore</label>
+                        </div>
                     </div>
                 </div>
             )}

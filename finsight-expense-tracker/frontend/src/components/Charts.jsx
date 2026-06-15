@@ -16,6 +16,14 @@ const COLORS = [
 ];
 
 export const ExpenseDoughnut = ({ data }) => {
+    if (!data || data.length === 0) {
+        return (
+            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--gray)' }}>
+                <div style={{ fontSize: '36px', marginBottom: '8px' }}>📊</div>
+                <p style={{ margin: 0 }}>No expense data available.</p>
+            </div>
+        );
+    }
     const chartData = {
         labels: data.map(d => d._id),
         datasets: [
@@ -69,6 +77,14 @@ export const ExpenseDoughnut = ({ data }) => {
 };
 
 export const ExpenseBar = ({ data }) => {
+    if (!data || data.length === 0) {
+        return (
+            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--gray)' }}>
+                <div style={{ fontSize: '36px', marginBottom: '8px' }}>📈</div>
+                <p style={{ margin: 0 }}>No monthly trend data.</p>
+            </div>
+        );
+    }
     const chartData = {
         labels: data.map(d => d.month),
         datasets: [

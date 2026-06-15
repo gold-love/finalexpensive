@@ -10,7 +10,12 @@ const getExpenses = async (req, res) => {
         const offset = (page - 1) * limit;
 
         // Build dynamic filter
-        const where = { userId: req.user.id };
+        let where = {};
+        if (req.user.role === 'admin' && req.query.scope === 'company') {
+            where = { organizationId: req.user.organizationId };
+        } else {
+            where = { userId: req.user.id };
+        }
 
         // Search by title or category
         if (req.query.search) {
@@ -51,9 +56,21 @@ const getExpenses = async (req, res) => {
             where.amount = { ...(where.amount || {}), [Op.lte]: parseFloat(req.query.maxAmount) };
         }
 
+        // Sorting logic
+        const sortBy = req.query.sortBy || 'date';
+        const sortOrder = req.query.sortOrder || 'DESC';
+        const validSortColumns = ['date', 'amount', 'title', 'category', 'status', 'createdAt'];
+        const finalSortBy = validSortColumns.includes(sortBy) ? sortBy : 'date';
+        const finalSortOrder = ['ASC', 'DESC'].includes(sortOrder.toUpperCase()) ? sortOrder.toUpperCase() : 'DESC';
+
         const { count, rows: expenses } = await Expense.findAndCountAll({
             where,
-            order: [['date', 'DESC']],
+            include: [
+                { model: require('../models/User'), attributes: ['id', 'name'] },
+                { model: require('../models/Project'), attributes: ['id', 'name', 'code'] },
+                { model: require('../models/Vendor'), attributes: ['id', 'name'] }
+            ],
+            order: [[finalSortBy, finalSortOrder]],
             limit,
             offset,
         });
@@ -73,7 +90,10 @@ const getExpenses = async (req, res) => {
 };
 
 const createExpense = async (req, res) => {
-    const { title, amount, category, date, description, currency, isRecurring, recurringInterval } = req.body;
+    let { 
+        title, amount, category, date, description, currency, 
+        isRecurring, recurringInterval, projectId, vendorId, taxRate 
+    } = req.body;
 
     // Validation
     if (!title || title.trim().length === 0) {
@@ -90,29 +110,101 @@ const createExpense = async (req, res) => {
 
     try {
         let status = 'pending';
+        let finalAmount = parseFloat(amount);
+        let appliedCurrency = currency || 'USD';
 
-        // Check for Auto-Approval Rules
+        // 💱 Task 2: Live Currency Conversion Engine Simulation
+        const companyBaseCurrency = req.user.preferredCurrency || 'USD';
+
+        if (appliedCurrency !== companyBaseCurrency) {
+            // In a real production app, this would call: await axios.get(`https://api.exchangerate-api.com/v4/latest/${appliedCurrency}`)
+            // Here we use a static mock dictionary for demonstration:
+            const mockRatesToUSD = { 'EUR': 1.08, 'GBP': 1.25, 'CAD': 0.73, 'AUD': 0.65, 'JPY': 0.0066 };
+            const fromRate = mockRatesToUSD[appliedCurrency] || 1;
+            const toRate = mockRatesToUSD[companyBaseCurrency] || 1;
+
+            // Formula: (Amount * From USD Rate) / To USD Rate
+            const convertedAmount = (finalAmount * fromRate) / toRate;
+            
+            // Add a note about conversion to description
+            const conversionNote = `[Converted from ${amount} ${appliedCurrency}]`;
+            description = description ? `${description}\n${conversionNote}` : conversionNote;
+            
+            finalAmount = convertedAmount;
+            appliedCurrency = companyBaseCurrency;
+
+            console.log(`[Currency Engine] Converted ${amount} to ${finalAmount.toFixed(2)} ${companyBaseCurrency}`);
+        }
+
+        // Check for Organization Rules
         if (req.user.organizationId) {
             const organization = await Organization.findByPk(req.user.organizationId);
-            if (organization && organization.settings && organization.settings.autoApproveLimit) {
-                const limit = parseFloat(organization.settings.autoApproveLimit);
-                if (parseFloat(amount) <= limit) {
+            const isAdmin = req.user.role === 'admin';
+
+            if (organization && organization.settings) {
+                // Admins are auto-approved
+                if (isAdmin) {
                     status = 'approved';
+                } else if (organization.settings.autoApproveLimit) {
+                    // Auto-Approval Check for regular users
+                    const limit = parseFloat(organization.settings.autoApproveLimit);
+                    if (finalAmount <= limit) {
+                        status = 'approved';
+                    }
+                }
+
+                // Strictly Enforce Max Limit (Regular users only)
+                if (!isAdmin && organization.settings.maxExpenseLimit) {
+                    const max = parseFloat(organization.settings.maxExpenseLimit);
+                    if (finalAmount > max) {
+                        return res.status(400).json({ message: `Expense exceeds organization's single-expense limit of ${max}` });
+                    }
+                }
+
+                // Check Receipt requirements (Regular users only)
+                if (!isAdmin && organization.settings.requireReceipts && !receiptUrl) {
+                    return res.status(400).json({ message: 'Organization policy requires a receipt for all expenses.' });
+                }
+
+                // Strict Budget Enforcement (Regular users only)
+                if (!isAdmin && organization.settings.strictBudgetEnforcement) {
+                    const Budget = require('../models/Budget');
+                    const budget = await Budget.findOne({
+                        where: { userId: req.user.id, category }
+                    });
+
+                    if (budget) {
+                        const totalSpentRaw = await Expense.sum('amount', {
+                            where: { userId: req.user.id, category }
+                        });
+                        const totalSpent = parseFloat(totalSpentRaw || 0);
+                        if (totalSpent + finalAmount > budget.amount) {
+                            return res.status(400).json({ message: `Strict budget enforcement: Expense rejected because it exceeds the budget for ${category}. Budget: ${budget.amount}, Spent: ${totalSpent}` });
+                        }
+                    }
                 }
             }
         }
 
+        // Calculate Tax if provided
+        const appliedTaxRate = parseFloat(taxRate) || 0;
+        const taxAmount = (finalAmount * (appliedTaxRate / 100));
+
         const expense = await Expense.create({
             userId: req.user.id,
             organizationId: req.user.organizationId,
+            projectId: projectId || null,
+            vendorId: vendorId || null,
             title,
-            amount,
+            amount: finalAmount,
             category,
             date: date || new Date(),
             description,
-            currency: currency || 'USD',
+            currency: appliedCurrency,
             receiptUrl,
-            status, // Set calculated status
+            status,
+            taxRate: appliedTaxRate,
+            taxAmount,
             isRecurring: isRecurring === 'true' || isRecurring === true,
             recurringInterval: (isRecurring === 'true' || isRecurring === true) ? recurringInterval : null,
         });
@@ -131,7 +223,8 @@ const deleteExpense = async (req, res) => {
         const expense = await Expense.findByPk(req.params.id);
 
         if (expense) {
-            if (expense.userId !== req.user.id) {
+            const isAdminForOrg = req.user.role === 'admin' && expense.organizationId === req.user.organizationId;
+            if (expense.userId !== req.user.id && !isAdminForOrg) {
                 return res.status(401).json({ message: 'Not authorized' });
             }
 
@@ -146,13 +239,17 @@ const deleteExpense = async (req, res) => {
 };
 
 const updateExpense = async (req, res) => {
-    const { title, amount, category, date, description, currency, isRecurring, recurringInterval } = req.body;
+    const { 
+        title, amount, category, date, description, currency, 
+        isRecurring, recurringInterval, projectId, vendorId, taxRate 
+    } = req.body;
 
     try {
         const expense = await Expense.findByPk(req.params.id);
 
         if (expense) {
-            if (expense.userId !== req.user.id) {
+            const isAdminForOrg = req.user.role === 'admin' && expense.organizationId === req.user.organizationId;
+            if (expense.userId !== req.user.id && !isAdminForOrg) {
                 return res.status(401).json({ message: 'Not authorized' });
             }
 
@@ -162,6 +259,13 @@ const updateExpense = async (req, res) => {
             expense.date = date || expense.date;
             expense.description = description || expense.description;
             expense.currency = currency || expense.currency;
+            expense.projectId = projectId !== undefined ? (projectId || null) : expense.projectId;
+            expense.vendorId = vendorId !== undefined ? (vendorId || null) : expense.vendorId;
+            
+            if (taxRate !== undefined) {
+                expense.taxRate = parseFloat(taxRate);
+                expense.taxAmount = (parseFloat(expense.amount) * (expense.taxRate / 100));
+            }
 
             if (isRecurring !== undefined) {
                 expense.isRecurring = isRecurring === 'true' || isRecurring === true;
@@ -194,5 +298,58 @@ const deleteAllExpenses = async (req, res) => {
     }
 };
 
-module.exports = { getExpenses, createExpense, deleteExpense, updateExpense, deleteAllExpenses };
+const getBudgetStatus = async (req, res) => {
+    try {
+        const { expenseId } = req.params;
+        const expense = await Expense.findByPk(expenseId);
+        
+        if (!expense) {
+            return res.status(404).json({ message: 'Expense not found' });
+        }
+
+        // Find the user's budget for this category
+        const budget = await require('../models/Budget').findOne({
+            where: {
+                userId: expense.userId,
+                category: expense.category,
+                status: 'approved'
+            }
+        });
+
+        if (!budget) {
+            return res.json({ hasBudget: false });
+        }
+
+        // Calculate total spent in this category (only approved ones)
+        const totalSpentRaw = await Expense.sum('amount', {
+            where: {
+                userId: expense.userId,
+                category: expense.category,
+                status: 'approved',
+                id: { [Op.ne]: expenseId } // Exclude this one if it's already approved
+            }
+        });
+
+        const totalSpent = parseFloat(totalSpentRaw || 0);
+        const budgetAmount = parseFloat(budget.amount);
+        const currentExpenseAmount = parseFloat(expense.amount);
+        const remaining = budgetAmount - totalSpent;
+        const willBeOver = (totalSpent + currentExpenseAmount) > budgetAmount;
+
+        res.json({
+            hasBudget: true,
+            budgetAmount,
+            totalSpent,
+            currentExpenseAmount,
+            remaining,
+            willBeOver,
+            percentUsed: ((totalSpent / budgetAmount) * 100).toFixed(1),
+            percentWithNew: (((totalSpent + currentExpenseAmount) / budgetAmount) * 100).toFixed(1)
+        });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
+};
+
+module.exports = { getExpenses, createExpense, deleteExpense, updateExpense, deleteAllExpenses, getBudgetStatus };
 

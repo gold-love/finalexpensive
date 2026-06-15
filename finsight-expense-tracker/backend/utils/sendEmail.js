@@ -24,7 +24,13 @@ const sendEmail = async (options) => {
         logger.info(`Message sent: ${info.messageId}`);
     } catch (error) {
         logger.error('Email send error:', error);
-        // Don't throw error to avoid crashing the whole request, but log it
+        // Development Fallback: Log to console so user can see the 2FA code in terminal
+        console.log('\n=======================================');
+        console.log('📧 DEVELOPMENT EMAIL LOG (SMTP FAILED)');
+        console.log('To:', options.email);
+        console.log('Subject:', options.subject);
+        console.log('Message:', options.message);
+        console.log('=======================================\n');
     }
 };
 

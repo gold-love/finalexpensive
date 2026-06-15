@@ -18,6 +18,18 @@ const Organization = sequelize.define('Organization', {
     settings: {
         type: DataTypes.JSONB,
         defaultValue: {},
+    },
+    branding: {
+        type: DataTypes.JSONB,
+        defaultValue: {
+            primaryColor: '#6366f1',
+            logoUrl: null,
+            companyWebsite: ''
+        }
+    },
+    categories: {
+        type: DataTypes.JSONB,
+        defaultValue: ['Food', 'Transport', 'Utilities', 'Entertainment', 'Shopping', 'Health', 'Travel', 'Services', 'Taxes', 'Salary', 'Rent', 'Others']
     }
 });
 

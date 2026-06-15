@@ -10,7 +10,7 @@ async function createAdmin() {
         await sequelize.sync();
 
         const adminEmail = 'gold@gmail.com';
-        const adminPassword = 'gold1234'; // CHANGE THIS AFTER LOGIN
+        const adminPassword = 'Gold@1234'; // CHANGE THIS AFTER LOGIN
 
         const existingAdmin = await User.findOne({ where: { email: adminEmail } });
 
