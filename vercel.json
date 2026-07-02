@@ -1,0 +1,8 @@
+{
+  "buildCommand": "cd finsight-expense-tracker/frontend && npm install && npm run build",
+  "outputDirectory": "finsight-expense-tracker/frontend/dist",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
