@@ -24,7 +24,10 @@ const app = express();
 app.use(helmet({
     crossOriginResourcePolicy: false, // Allow loading images from our own server
 }));
-app.use(cors());
+app.use(cors({
+    origin: process.env.FRONTEND_URL || '*',
+    credentials: true
+}));
 
 // Body Parsers
 app.use(express.json());
