@@ -15805,3 +15805,37 @@
 {"level":"info","message":"GET /api/expenses?limit=5&timeRange=all 304 - 92ms","service":"finsight-backend","timestamp":"2026-07-02 23:40:26"}
 {"level":"info","message":"GET /api/reports/admin-summary?timeRange=all 500 - 125ms","service":"finsight-backend","timestamp":"2026-07-02 23:40:26"}
 {"level":"info","message":"GET /api/reports/admin-summary?timeRange=all 500 - 71ms","service":"finsight-backend","timestamp":"2026-07-02 23:40:26"}
+{"level":"info","message":"Recurring expense scheduler initialized","service":"finsight-backend","timestamp":"2026-07-02 23:40:38"}
+{"level":"info","message":"Running daily check for recurring expenses...","service":"finsight-backend","timestamp":"2026-07-02 23:40:38"}
+{"level":"info","message":"Server running in development mode on port 5000","service":"finsight-backend","timestamp":"2026-07-02 23:40:40"}
+{"level":"info","message":"GET /api/notifications 304 - 270ms","service":"finsight-backend","timestamp":"2026-07-02 23:41:26"}
+{"level":"info","message":"GET /api/notifications/unread-count 304 - 243ms","service":"finsight-backend","timestamp":"2026-07-02 23:41:26"}
+{"level":"info","message":"GET /api/notifications 304 - 134ms","service":"finsight-backend","timestamp":"2026-07-02 23:42:26"}
+{"level":"info","message":"GET /api/notifications/unread-count 304 - 131ms","service":"finsight-backend","timestamp":"2026-07-02 23:42:26"}
+{"level":"info","message":"GET /api/notifications 304 - 232ms","service":"finsight-backend","timestamp":"2026-07-02 23:43:26"}
+{"level":"info","message":"GET /api/notifications/unread-count 304 - 232ms","service":"finsight-backend","timestamp":"2026-07-02 23:43:26"}
+{"level":"info","message":"GET /api/notifications 304 - 152ms","service":"finsight-backend","timestamp":"2026-07-02 23:44:26"}
+{"level":"info","message":"GET /api/notifications/unread-count 304 - 151ms","service":"finsight-backend","timestamp":"2026-07-02 23:44:26"}
+{"level":"info","message":"GET /api/notifications 304 - 263ms","service":"finsight-backend","timestamp":"2026-07-02 23:45:26"}
+{"level":"info","message":"GET /api/notifications/unread-count 304 - 262ms","service":"finsight-backend","timestamp":"2026-07-02 23:45:26"}
+{"level":"info","message":"GET /api/notifications 304 - 105ms","service":"finsight-backend","timestamp":"2026-07-02 23:46:26"}
+{"level":"info","message":"GET /api/notifications/unread-count 304 - 103ms","service":"finsight-backend","timestamp":"2026-07-02 23:46:26"}
+{"level":"info","message":"GET /api/notifications 304 - 139ms","service":"finsight-backend","timestamp":"2026-07-02 23:48:12"}
+{"level":"info","message":"GET /api/notifications/unread-count 304 - 131ms","service":"finsight-backend","timestamp":"2026-07-02 23:48:12"}
+{"level":"info","message":"GET /api/notifications 304 - 115ms","service":"finsight-backend","timestamp":"2026-07-02 23:49:12"}
+{"level":"info","message":"GET /api/notifications/unread-count 304 - 110ms","service":"finsight-backend","timestamp":"2026-07-02 23:49:12"}
+{"level":"info","message":"GET /api/notifications 304 - 114ms","service":"finsight-backend","timestamp":"2026-07-02 23:50:12"}
+{"level":"info","message":"GET /api/notifications/unread-count 304 - 110ms","service":"finsight-backend","timestamp":"2026-07-02 23:50:12"}
+{"level":"info","message":"GET /api/notifications 304 - 135ms","service":"finsight-backend","timestamp":"2026-07-02 23:51:12"}
+{"level":"info","message":"GET /api/notifications/unread-count 304 - 130ms","service":"finsight-backend","timestamp":"2026-07-02 23:51:12"}
+{"level":"info","message":"GET /api/notifications 304 - 85ms","service":"finsight-backend","timestamp":"2026-07-02 23:52:12"}
+{"level":"info","message":"GET /api/notifications/unread-count 304 - 86ms","service":"finsight-backend","timestamp":"2026-07-02 23:52:12"}
+{"level":"info","message":"GET /api/notifications 304 - 100ms","service":"finsight-backend","timestamp":"2026-07-02 23:53:12"}
+{"level":"info","message":"GET /api/notifications/unread-count 304 - 96ms","service":"finsight-backend","timestamp":"2026-07-02 23:53:12"}
+{"level":"info","message":"GET /api/notifications 304 - 126ms","service":"finsight-backend","timestamp":"2026-07-02 23:54:12"}
+{"level":"info","message":"GET /api/notifications/unread-count 304 - 130ms","service":"finsight-backend","timestamp":"2026-07-02 23:54:12"}
+{"level":"info","message":"Recurring expense scheduler initialized","service":"finsight-backend","timestamp":"2026-07-02 23:55:08"}
+{"level":"info","message":"Running daily check for recurring expenses...","service":"finsight-backend","timestamp":"2026-07-02 23:55:09"}
+{"level":"info","message":"Server running in development mode on port 5000","service":"finsight-backend","timestamp":"2026-07-02 23:55:11"}
+{"level":"info","message":"GET /api/notifications 304 - 267ms","service":"finsight-backend","timestamp":"2026-07-02 23:55:12"}
+{"level":"info","message":"GET /api/notifications/unread-count 304 - 237ms","service":"finsight-backend","timestamp":"2026-07-02 23:55:12"}
