@@ -85,8 +85,10 @@ const resetPassword = async (req, res) => {
     const { password } = req.body;
     const { token } = req.params;
 
-    if (!password || password.length < 6) {
-        return res.status(400).json({ message: 'Password must be at least 6 characters' });
+    const { validatePasswordComplexity } = require('../utils/passwordValidator');
+    const pwdCheck = validatePasswordComplexity(password);
+    if (!pwdCheck.isValid) {
+        return res.status(400).json({ message: pwdCheck.message });
     }
 
     try {

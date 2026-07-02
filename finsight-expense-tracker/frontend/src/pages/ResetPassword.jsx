@@ -21,8 +21,17 @@ const ResetPassword = () => {
             return;
         }
 
-        if (password.length < 6) {
-            toast.error('Password must be at least 6 characters');
+        const validatePassword = (pwd) => {
+            if (pwd.length < 8) return "Password must be at least 8 characters long.";
+            if (!/[A-Z]/.test(pwd)) return "Password must contain at least one uppercase letter.";
+            if (!/[a-z]/.test(pwd)) return "Password must contain at least one lowercase letter.";
+            if (!/[0-9]/.test(pwd)) return "Password must contain at least one number.";
+            if (!/[!@#$%^&*(),.?":{}|<>]/.test(pwd)) return "Password must contain at least one special character.";
+            return null;
+        };
+        const pwdError = validatePassword(password);
+        if (pwdError) {
+            toast.error(pwdError);
             return;
         }
 

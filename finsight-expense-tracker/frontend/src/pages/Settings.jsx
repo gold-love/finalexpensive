@@ -5,7 +5,7 @@ import ThemeContext from '../context/ThemeContext';
 import { useToast } from '../context/ToastContext';
 import api from '../services/api';
 import { getTranslation } from '../utils/i18n';
-import BankIntegration from '../components/BankIntegration';
+import { CURRENCIES } from '../utils/currency';
 
 const Settings = () => {
     const { user, updateProfile, updateProfileImage, setUser } = useContext(AuthContext);
@@ -50,6 +50,10 @@ const Settings = () => {
     const [fiscalYearStart, setFiscalYearStart] = useState(user?.fiscalYearStart || 1);
     const [defaultCurrency, setDefaultCurrency] = useState(user?.preferredCurrency || 'USD');
     const [language, setLanguage] = useState(user?.language || 'en');
+    const [defaultCategory, setDefaultCategory] = useState(user?.defaultCategory || '');
+    const [defaultBudgetCategory, setDefaultBudgetCategory] = useState(user?.defaultBudgetCategory || '');
+
+
 
     // Organization & Branding (Admin only)
     const [orgSettings, setOrgSettings] = useState({
@@ -185,6 +189,20 @@ const Settings = () => {
         if (password && password !== confirmPassword) {
             return toast.error('Passwords do not match');
         }
+        if (password) {
+            const validatePassword = (pwd) => {
+                if (pwd.length < 8) return "Password must be at least 8 characters long.";
+                if (!/[A-Z]/.test(pwd)) return "Password must contain at least one uppercase letter.";
+                if (!/[a-z]/.test(pwd)) return "Password must contain at least one lowercase letter.";
+                if (!/[0-9]/.test(pwd)) return "Password must contain at least one number.";
+                if (!/[!@#$%^&*(),.?":{}|<>]/.test(pwd)) return "Password must contain at least one special character.";
+                return null;
+            };
+            const pwdError = validatePassword(password);
+            if (pwdError) {
+                return toast.error(pwdError);
+            }
+        }
         try {
             await updateProfile({ 
                 name, email, jobTitle, department, 
@@ -209,8 +227,21 @@ const Settings = () => {
 
     const handleAdvancedUpdate = async () => {
         try {
-            await api.put('/settings/preferences', { fiscalYearStart, preferredCurrency: defaultCurrency, language });
-            const updatedUser = { ...user, fiscalYearStart, preferredCurrency: defaultCurrency, language };
+            await api.put('/settings/preferences', {
+                fiscalYearStart,
+                preferredCurrency: defaultCurrency, // Fix: matches backend field name
+                language,
+                defaultCategory: defaultCategory || null,
+                defaultBudgetCategory: defaultBudgetCategory || null,
+            });
+            const updatedUser = {
+                ...user,
+                fiscalYearStart,
+                preferredCurrency: defaultCurrency,
+                language,
+                defaultCategory,
+                defaultBudgetCategory,
+            };
             setUser(updatedUser);
             localStorage.setItem('user', JSON.stringify(updatedUser));
             toast.success('Preferences updated!');
@@ -861,10 +892,30 @@ const Settings = () => {
                     <div className="form-group">
                         <label>{getTranslation(user?.language, 'primary_currency')}</label>
                         <select className="form-control" value={defaultCurrency} onChange={e => setDefaultCurrency(e.target.value)}>
-                            <option value="USD">USD ($)</option>
-                            <option value="EUR">EUR (€)</option>
-                            <option value="GBP">GBP (£)</option>
+                            {CURRENCIES.map(c => (
+                                <option key={c.code} value={c.code}>{c.label}</option>
+                            ))}
                         </select>
+                    </div>
+                    <div className="form-group">
+                        <label>Default Expense Category</label>
+                        <select className="form-control" value={defaultCategory} onChange={e => setDefaultCategory(e.target.value)}>
+                            <option value="">— None —</option>
+                            {['Food', 'Transport', 'Office Supplies', 'Travel', 'Utilities', 'Entertainment', 'Healthcare', 'Education', 'Other'].map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                        </select>
+                        <small style={{ color: 'var(--gray)', fontSize: '12px' }}>Pre-fills the category when adding a new expense.</small>
+                    </div>
+                    <div className="form-group">
+                        <label>Default Budget Category</label>
+                        <select className="form-control" value={defaultBudgetCategory} onChange={e => setDefaultBudgetCategory(e.target.value)}>
+                            <option value="">— None —</option>
+                            {['Food', 'Transport', 'Office Supplies', 'Travel', 'Utilities', 'Entertainment', 'Healthcare', 'Education', 'Other'].map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                        </select>
+                        <small style={{ color: 'var(--gray)', fontSize: '12px' }}>Pre-fills the category when creating a new budget.</small>
                     </div>
                     <button onClick={handleAdvancedUpdate} className="btn btn-primary" style={{ width: '100%' }}>{getTranslation(user?.language, 'apply_preferences')}</button>
                 </div>
@@ -907,10 +958,6 @@ const Settings = () => {
                 <div className="card slide-up">
                     <h3 style={{ marginBottom: '20px' }}>🔌 Integration Hub</h3>
                     
-                    {/* Bank Integration (Plaid) */}
-                    <h4 style={{ marginBottom: '15px', color: 'var(--dark-soft)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>🏦 Bank Connections</h4>
-                    <BankIntegration />
-
                     {/* Other Integrations */}
                     <h4 style={{ marginBottom: '15px', marginTop: '30px', color: 'var(--dark-soft)', fontSize: '14px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>📱 Third-Party Apps</h4>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>

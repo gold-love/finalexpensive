@@ -57,11 +57,12 @@ function App() {
             <AuthProvider>
               <Router>
                 <Routes>
+                  <Route path="/" element={<Navigate to="/login" replace />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/forgot-password" element={<ForgotPassword />} />
                   <Route path="/reset-password/:token" element={<ResetPassword />} />
                   <Route element={<PrivateRoute />}>
-                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/add-expense" element={<AddExpense />} />
                     <Route path="/expenses" element={<Expenses />} />
                     <Route path="/approvals" element={<Approvals />} />

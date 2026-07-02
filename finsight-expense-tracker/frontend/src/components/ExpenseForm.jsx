@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
+import DatePickerCalendar from './DatePickerCalendar';
 
 const ExpenseForm = ({ onSuccess, initialData }) => {
     const [formData, setFormData] = useState({
@@ -17,11 +18,8 @@ const ExpenseForm = ({ onSuccess, initialData }) => {
         taxRate: 0,
     });
     const [receipt, setReceipt] = useState(null);
-    const [scanning, setScanning] = useState(false);
-    const [fileType, setFileType] = useState('image/*');
     const [projects, setProjects] = useState([]);
     const [vendors, setVendors] = useState([]);
-    const fileInputRef = useRef(null);
     const toast = useToast();
 
     useEffect(() => {
@@ -65,41 +63,7 @@ const ExpenseForm = ({ onSuccess, initialData }) => {
         setReceipt(e.target.files[0] || null);
     };
 
-    // Accept file directly from DOM ref to avoid React state timing issues
-    const handleScanReceipt = async (fileToScan) => {
-        const file = fileToScan || fileInputRef.current?.files[0] || receipt;
-        if (!file) {
-            toast.warning('Please select a file before clicking AI Scan');
-            return;
-        }
 
-        setScanning(true);
-        const data = new FormData();
-        data.append('receipt', file);
-
-        try {
-            const response = await api.post('/expenses/scan', data, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-
-            if (response.data.success) {
-                const { amount, date, title } = response.data.data;
-                setFormData(prev => ({
-                    ...prev,
-                    amount: amount || prev.amount,
-                    title: title || prev.title,
-                    date: date ? new Date(date).toISOString().split('T')[0] : prev.date
-                }));
-                toast.success('✨ Receipt analyzed! Title, Amount, and Date have been auto-filled. Please verify them.');
-            }
-        } catch (error) {
-            console.error('Scan Error:', error);
-            const msg = error.response?.data?.message || 'The AI could not read this receipt clearly. Please ensure it is a sharp image (JPG/PNG).';
-            toast.error(msg);
-        } finally {
-            setScanning(false);
-        }
-    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -189,7 +153,7 @@ const ExpenseForm = ({ onSuccess, initialData }) => {
             </div>
             <div className="form-group">
                 <label>Date</label>
-                <input type="date" name="date" value={formData.date} onChange={handleChange} className="form-control" />
+                <DatePickerCalendar name="date" value={formData.date} onChange={handleChange} placeholder="Select expense date" />
             </div>
             <div className="form-group">
                 <label>Description</label>
@@ -212,107 +176,12 @@ const ExpenseForm = ({ onSuccess, initialData }) => {
             )}
             <div className="form-group">
                 <label>Receipt / Document</label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-
-                    {/* Step 1: File Type Selector */}
-                    <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        padding: '12px 16px',
-                        background: 'linear-gradient(135deg, rgba(99,102,241,0.06), rgba(139,92,246,0.06))',
-                        borderRadius: '12px',
-                        border: '1px solid var(--primary-light)'
-                    }}>
-                        <span style={{ fontSize: '18px' }}>📂</span>
-                        <label style={{ fontWeight: '700', fontSize: '13px', color: 'var(--dark-soft)', whiteSpace: 'nowrap', margin: 0 }}>
-                            File Type:
-                        </label>
-                        <select
-                            value={fileType}
-                            onChange={(e) => {
-                                setFileType(e.target.value);
-                                // Clear selected file using ref — avoids remounting the input
-                                setReceipt(null);
-                                if (fileInputRef.current) {
-                                    fileInputRef.current.value = '';
-                                }
-                            }}
-                            className="form-control"
-                            style={{
-                                borderRadius: '8px',
-                                fontWeight: '700',
-                                fontSize: '13px',
-                                border: '1px solid var(--primary)',
-                                color: 'var(--primary)',
-                                background: 'white',
-                                flex: 1,
-                                padding: '8px 12px',
-                                cursor: 'pointer'
-                            }}
-                        >
-                            <option value="image/*">🖼️ Any Image (JPG, PNG, WEBP...)</option>
-                            <option value=".jpg,.jpeg">📷 JPG / JPEG only</option>
-                            <option value=".png">🗃️ PNG only</option>
-                            <option value=".pdf">📄 PDF only</option>
-                            <option value=".jpg,.jpeg,.png,.pdf">📎 Image + PDF</option>
-                            <option value=".webp">🌐 WEBP only</option>
-                            <option value=".bmp">🖨️ BMP only</option>
-                            <option value="*">📁 All File Types</option>
-                        </select>
-                    </div>
-
-                    {/* Step 2: File Picker + AI Scan Button */}
-                    <div style={{ display: 'flex', gap: '12px' }}>
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            onChange={(e) => {
-                                handleFileChange(e);
-                                if (e.target.files[0]) {
-                                    toast.info(`✅ "${e.target.files[0].name}" selected. Click AI Scan to auto-fill.`);
-                                }
-                            }}
-                            className="form-control"
-                            accept={fileType}
-                            style={{ flex: 1 }}
-                        />
-                        <button
-                            type="button"
-                            onClick={() => {
-                                // Read file directly from DOM ref — avoids React state timing bug
-                                const file = fileInputRef.current?.files[0];
-                                if (!file) {
-                                    toast.warning('Please select a file before clicking AI Scan');
-                                } else {
-                                    setReceipt(file); // sync state
-                                    handleScanReceipt(file); // pass file directly
-                                }
-                            }}
-                            className="btn"
-                            style={{
-                                background: receipt ? 'var(--grad-primary)' : '#94a3b8',
-                                color: '#ffffff',
-                                flexShrink: 0,
-                                fontWeight: '800',
-                                padding: '0 20px',
-                                borderRadius: '10px',
-                                transition: 'all 0.3s ease',
-                                opacity: scanning ? 0.7 : 1,
-                                boxShadow: receipt ? '0 4px 12px rgba(99, 102, 241, 0.3)' : 'none',
-                                cursor: receipt ? 'pointer' : 'not-allowed'
-                            }}
-                            disabled={scanning}
-                        >
-                            {scanning ? '🌀 Scanning...' : '✨ AI Scan'}
-                        </button>
-                    </div>
-
-                    {/* Status hints */}
-                    {!receipt && <small style={{ color: 'var(--gray)', fontSize: '12px' }}>👆 Select a file type above, then choose your file</small>}
-                    {receipt && !scanning && <small style={{ color: 'var(--primary)', fontWeight: '700' }}>✅ Ready! Click <b>AI Scan</b> to auto-fill the form from your receipt.</small>}
-                    {scanning && <small style={{ color: 'var(--primary)', fontWeight: '800', animation: 'pulse 1.5s infinite' }}>🔍 Analyzing receipt... this may take 5–10 seconds.</small>}
-                </div>
+                <input
+                    type="file"
+                    onChange={handleFileChange}
+                    className="form-control"
+                    accept="image/*,.pdf"
+                />
             </div>
             <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>
                 {initialData ? 'Update Expense' : 'Add Expense'}

@@ -3,6 +3,7 @@ import { ExpenseBar, ExpenseDoughnut } from '../components/Charts';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 import AuthContext from '../context/AuthContext';
+import DatePickerCalendar from '../components/DatePickerCalendar';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -218,16 +219,14 @@ const Reports = () => {
             </div>
 
             {/* ── Date Range Filter ── */}
-            <div className="card" style={{ padding: '16px 20px', marginBottom: '24px', display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div className="card" style={{ padding: '16px 20px', marginBottom: '24px', display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap', overflow: 'visible', position: 'relative', zIndex: 100 }}>
                 <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: 'var(--gray)', marginBottom: '6px', textTransform: 'uppercase' }}>From</label>
-                    <input id="date-from-input" type="date" className="form-control" style={{ minWidth: '160px' }}
-                        value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+                    <DatePickerCalendar id="date-from-input" value={dateFrom} onChange={e => setDateFrom(e.target.value)} placeholder="Start date" style={{ minWidth: '160px' }} dropDirection="down" />
                 </div>
                 <div>
                     <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: 'var(--gray)', marginBottom: '6px', textTransform: 'uppercase' }}>To</label>
-                    <input id="date-to-input" type="date" className="form-control" style={{ minWidth: '160px' }}
-                        value={dateTo} onChange={e => setDateTo(e.target.value)} />
+                    <DatePickerCalendar id="date-to-input" value={dateTo} onChange={e => setDateTo(e.target.value)} placeholder="End date" style={{ minWidth: '160px' }} dropDirection="down" />
                 </div>
                 <button id="apply-filter-btn" onClick={fetchData} className="btn btn-primary" disabled={filtering}
                     style={{ height: '42px', minWidth: '100px' }}>

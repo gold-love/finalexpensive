@@ -144,7 +144,7 @@ const Footer = () => {
                 {/* 2. QUICK NAVIGATION & NEWSLETTER */}
                 <div style={footerStyles.column}>
                     <h3 style={footerStyles.heading}>Quick Access</h3>
-                    <Link to="/" className="footer-link" style={footerStyles.link}>📊 Main Dashboard</Link>
+                    <Link to="/dashboard" className="footer-link" style={footerStyles.link}>📊 Main Dashboard</Link>
                     <Link to="/expenses" className="footer-link" style={footerStyles.link}>💸 Expense Tracking</Link>
                     <Link to="/budgets" className="footer-link" style={footerStyles.link}>📅 Budget Management</Link>
                     <Link to="/reports" className="footer-link" style={footerStyles.link}>📈 Analytics & Reports</Link>
@@ -262,9 +262,7 @@ const Footer = () => {
                     <p style={{ fontSize: '15px' }}>
                         Developed with ❤️ by <b style={{ color: 'var(--primary)', borderBottom: '2px solid var(--primary-soft)' }}>Workalem Fikir</b>
                     </p>
-                    <div style={{ background: 'var(--gray-light)', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: '700' }}>
-                        VERSION 1.4.2
-                    </div>
+
                 </div>
             </div>
             <style>

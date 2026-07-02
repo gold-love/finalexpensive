@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
+import DatePickerCalendar from '../components/DatePickerCalendar';
 import api from '../services/api';
 import { useToast } from '../context/ToastContext';
 import AuthContext from '../context/AuthContext';
@@ -501,7 +502,7 @@ const AssetsTab = () => {
                         <div className="form-group" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                             <div>
                                 <label>Purchase Date</label>
-                                <input type="date" className="form-control" value={form.purchaseDate} onChange={e => setForm({ ...form, purchaseDate: e.target.value })} />
+                                <DatePickerCalendar value={form.purchaseDate} onChange={e => setForm({ ...form, purchaseDate: e.target.value })} placeholder="Select purchase date" />
                             </div>
                             <div>
                                 <label>Purchase Price ($)</label>

@@ -260,6 +260,17 @@ This project is a complete, production-ready Full-Stack application designed to 
 - **Design Excellence**: Prioritizes user experience with a responsive, premium design system and real-time visual feedback.
 - **Maintainability**: Clear separation of concerns between backend controllers, models, and frontend hooks/services.
 
+## ⚡ Features & Integrations (Roadmap)
+
+To further scale and productionize the **Finsight Expense Tracker**, the following integrations are scheduled:
+
+1. **Real-time Currency Conversion (Exchange Rate API)**:
+   - Hook up a live rates API (like ExchangeRate-API) to dynamically fetch rates and convert multi-currency entries on the fly.
+2. **Receipt OCR Enhancements**:
+   - Enhance the integrated Tesseract.js scanner to automatically extract tax values, itemized invoice tables, and vendor names with higher accuracy.
+3. **Email Notification Dispatcher**:
+   - Integrate Nodemailer with SendGrid or custom SMTP settings to dispatch alerts for budget overruns and pending manager approvals.
+
 ## 👨‍💻 Author
 
 **Your Name**

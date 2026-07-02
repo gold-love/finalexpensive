@@ -50,6 +50,15 @@ const BankIntegration = () => {
         }
     };
 
+    const handleConnectClick = () => {
+        if (ready) {
+            open();
+        } else {
+            // Mock connection for development when Plaid is not configured
+            onSuccess('mock-public-token-123', { institution: { name: 'Demo Bank (Mock)' } });
+        }
+    };
+
     return (
         <div className="bank-integration-card" style={{ padding: '24px', border: '1px solid var(--gray-light)', borderRadius: '20px', background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.05), rgba(139, 92, 246, 0.05))', marginBottom: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px' }}>
@@ -67,8 +76,7 @@ const BankIntegration = () => {
             <div style={{ display: 'flex', gap: '10px' }}>
                 <button 
                     className="btn btn-primary" 
-                    onClick={() => open()} 
-                    disabled={!ready}
+                    onClick={handleConnectClick} 
                     style={{ flex: 1, fontWeight: 'bold' }}
                 >
                     Connect Bank

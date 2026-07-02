@@ -44,12 +44,18 @@ const createLinkToken = async (req, res) => {
 const exchangePublicToken = async (req, res) => {
     try {
         const { publicToken, institutionName } = req.body;
-        const exchangeResponse = await plaidClient.itemPublicTokenExchange({
-            public_token: publicToken,
-        });
+        let accessToken, itemId;
 
-        const accessToken = exchangeResponse.data.access_token;
-        const itemId = exchangeResponse.data.item_id;
+        if (publicToken.startsWith('mock-')) {
+            accessToken = 'mock-access-token-' + Date.now();
+            itemId = 'mock-item-id-' + Date.now();
+        } else {
+            const exchangeResponse = await plaidClient.itemPublicTokenExchange({
+                public_token: publicToken,
+            });
+            accessToken = exchangeResponse.data.access_token;
+            itemId = exchangeResponse.data.item_id;
+        }
 
         // Save connection to database
         const connection = await BankConnection.create({
@@ -86,14 +92,24 @@ const syncTransactions = async (req, res) => {
             const formattedStartDate = startDate.toISOString().split('T')[0];
             const formattedEndDate = new Date().toISOString().split('T')[0];
 
-            const request = {
-                access_token: connection.accessToken,
-                start_date: formattedStartDate,
-                end_date: formattedEndDate,
-            };
+            let transactions = [];
 
-            const response = await plaidClient.transactionsGet(request);
-            const transactions = response.data.transactions;
+            if (connection.accessToken.startsWith('mock-')) {
+                // Mock transactions
+                transactions = [
+                    { amount: 15.50, name: 'Coffee Shop', category: ['Food and Drink'], date: formattedEndDate },
+                    { amount: 120.00, name: 'Grocery Store', category: ['Shops'], date: formattedEndDate },
+                    { amount: 45.00, name: 'Gas Station', category: ['Travel'], date: formattedStartDate }
+                ];
+            } else {
+                const request = {
+                    access_token: connection.accessToken,
+                    start_date: formattedStartDate,
+                    end_date: formattedEndDate,
+                };
+                const response = await plaidClient.transactionsGet(request);
+                transactions = response.data.transactions;
+            }
 
             for (const txn of transactions) {
                 // Check if expense already exists (we could add a plaidTransactionId field to Expense, 

@@ -44,7 +44,7 @@ const NotFound = () => {
                 </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     <Link
-                        to="/"
+                        to="/login"
                         style={{
                             padding: '16px 32px',
                             fontSize: '1rem',
@@ -60,7 +60,7 @@ const NotFound = () => {
                         onMouseOver={(e) => e.target.style.transform = 'translateY(-2px)'}
                         onMouseOut={(e) => e.target.style.transform = 'translateY(0)'}
                     >
-                        🏠 Return to Dashboard
+                        🏠 Return to Login
                     </Link>
                     <Link
                         to="/login"

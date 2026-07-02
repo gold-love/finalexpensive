@@ -31,14 +31,24 @@ const updateNotificationPreferences = async (req, res) => {
     } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
+const ALLOWED_CURRENCIES = ['USD', 'EUR', 'GBP', 'ETB', 'KES'];
+
 const updateAdvancedPreferences = async (req, res) => {
     try {
-        const { fiscalYearStart, defaultCategory, defaultBudgetCategory, defaultCurrency, language } = req.body;
+        const { fiscalYearStart, defaultCategory, defaultBudgetCategory, preferredCurrency, language } = req.body;
+        // Validate currency if provided
+        if (preferredCurrency !== undefined && !ALLOWED_CURRENCIES.includes(preferredCurrency)) {
+            return res.status(400).json({ message: `Invalid currency. Allowed values: ${ALLOWED_CURRENCIES.join(', ')}` });
+        }
         const user = await User.findByPk(req.user.id);
         if (fiscalYearStart !== undefined) user.fiscalYearStart = fiscalYearStart;
         if (defaultCategory !== undefined) user.defaultCategory = defaultCategory;
         if (defaultBudgetCategory !== undefined) user.defaultBudgetCategory = defaultBudgetCategory;
-        if (defaultCurrency !== undefined) user.defaultCurrency = defaultCurrency;
+        // Fix: save to preferredCurrency (canonical field used across the whole app)
+        if (preferredCurrency !== undefined) {
+            user.preferredCurrency = preferredCurrency;
+            user.defaultCurrency = preferredCurrency; // keep both in sync
+        }
         if (language !== undefined) user.language = language;
         await user.save();
         res.json({ message: 'Preferences updated successfully' });
@@ -335,6 +345,42 @@ const revokeApiKey = async (req, res) => {
     } catch (error) { res.status(500).json({ message: error.message }); }
 };
 
+/**
+ * POST /settings/verify-admin
+ * Verifies that the supplied email+password belong to an admin account.
+ * Returns a short-lived admin token (15 min) used by the frontend to
+ * gate admin-only sections without a separate login page.
+ */
+const verifyAdminCredentials = async (req, res) => {
+    try {
+        const { email, password } = req.body;
+        if (!email || !password)
+            return res.status(400).json({ message: 'Email and password are required.' });
+
+        const admin = await User.findOne({ where: { email } });
+        if (!admin || admin.role !== 'admin')
+            return res.status(403).json({ message: 'No admin account found with that email.' });
+
+        const passwordMatch = await admin.matchPassword(password);
+        if (!passwordMatch)
+            return res.status(401).json({ message: 'Incorrect password.' });
+
+        // Issue a short-lived token (15 min) scoped only for admin UI actions
+        const jwt = require('jsonwebtoken');
+        const adminToken = jwt.sign(
+            { adminId: admin.id, scope: 'admin_ui' },
+            process.env.JWT_SECRET || 'secret',
+            { expiresIn: '15m' }
+        );
+
+        res.json({
+            message: 'Admin credentials verified.',
+            adminToken,
+            expiresIn: 15 * 60 * 1000, // ms — for frontend countdown
+        });
+    } catch (error) { res.status(500).json({ message: error.message }); }
+};
+
 module.exports = {
     updateNotificationPreferences,
     updateAdvancedPreferences,
@@ -357,5 +403,6 @@ module.exports = {
     restoreOrganizationData,
     getApiKeys,
     createApiKey,
-    revokeApiKey
+    revokeApiKey,
+    verifyAdminCredentials,
 };

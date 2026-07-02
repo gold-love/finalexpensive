@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useContext } from 'react';
 import ExpenseTable from '../components/ExpenseTable';
 import ExpenseForm from '../components/ExpenseForm';
+import DatePickerCalendar from '../components/DatePickerCalendar';
 import api from '../services/api';
 import AuthContext from '../context/AuthContext';
 
@@ -382,8 +383,8 @@ const Expenses = () => {
                     </div>
                 </div>
             </div>
-            <div className="card" style={{ marginBottom: '20px', padding: '20px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px', alignItems: 'end' }}>
+            <div className="card" style={{ marginBottom: '20px', padding: '20px', overflow: 'visible' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '15px', alignItems: 'end', overflow: 'visible' }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>
                         <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--gray)' }}>Status</label>
                         <select className="form-control" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -407,11 +408,11 @@ const Expenses = () => {
                     </div>
                     <div className="form-group" style={{ marginBottom: 0 }}>
                         <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--gray)' }}>From Date</label>
-                        <input type="date" className="form-control" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                        <DatePickerCalendar value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} placeholder="Start date" />
                     </div>
                     <div className="form-group" style={{ marginBottom: 0 }}>
                         <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--gray)' }}>To Date</label>
-                        <input type="date" className="form-control" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                        <DatePickerCalendar value={dateTo} onChange={(e) => setDateTo(e.target.value)} placeholder="End date" />
                     </div>
                     <button 
                         className="btn" 

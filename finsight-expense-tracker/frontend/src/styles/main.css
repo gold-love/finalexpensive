@@ -96,7 +96,7 @@ h2 {
   border: 1px solid rgba(226, 232, 240, 0.8);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .card:hover {
@@ -190,6 +190,8 @@ h2 {
 /* Forms */
 .form-group {
   margin-bottom: 20px;
+  overflow: visible;
+  position: relative;
 }
 
 .form-group label {
@@ -655,6 +657,383 @@ tr:hover td {
   .main-content {
     padding: 0;
     margin: 0;
+  }
+}
+
+/* ─── DatePicker Calendar ──────────────────────────────────────────── */
+.dp-wrapper {
+  position: relative;
+  width: 100%;
+  z-index: 1001;
+}
+
+.dp-trigger {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  min-height: 44px;
+}
+
+.dp-trigger--open {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+}
+
+.dp-trigger__icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.dp-trigger__text {
+  flex: 1;
+  font-weight: 500;
+  color: var(--dark-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dp-trigger__placeholder {
+  color: var(--gray-light);
+  font-weight: 400;
+}
+
+.dp-trigger__clear {
+  background: none;
+  border: none;
+  color: var(--gray-light);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.dp-trigger__clear:hover {
+  background: var(--danger);
+  color: white;
+}
+
+.dp-trigger__chevron {
+  font-size: 11px;
+  color: var(--gray-light);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+/* Calendar Dropdown */
+.dp-calendar {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 999999;
+  width: 300px;
+  background: var(--white);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 14px;
+  box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.15), 0 8px 16px -4px rgba(99, 102, 241, 0.08);
+  padding: 16px;
+  animation: dpSlideDown 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dp-calendar--up {
+  top: auto;
+  bottom: calc(100% + 6px);
+  animation: dpSlideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dpSlideDown {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes dpSlideUp {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Header */
+.dp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.dp-header__title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0 12px;
+}
+
+.dp-header__select-group {
+  display: none;
+}
+
+.dp-select {
+  display: none;
+}
+
+.dp-select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.dp-header__month,
+.dp-header__year {
+  display: block;
+}
+
+.dp-header__month {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--dark);
+}
+
+.dp-header__year {
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--gray-light);
+}
+
+.dp-nav-btn {
+  background: none;
+  border: 1px solid transparent;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--dark-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.dp-nav-btn:hover {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+/* Day-of-week row */
+.dp-dow-row {
+  display: none;
+}
+
+.dp-dow {
+  display: none;
+}
+
+/* Days grid */
+.dp-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.dp-day {
+  width: 100%;
+  aspect-ratio: 1;
+  border: none;
+  background: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--dark-soft);
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dp-day:hover:not(.dp-day--empty):not(.dp-day--selected) {
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--primary);
+  transform: scale(1.12);
+}
+
+.dp-day--empty {
+  cursor: default;
+}
+
+.dp-day--today {
+  font-weight: 800;
+  color: var(--primary);
+  position: relative;
+}
+
+.dp-day--today::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+
+.dp-day--selected {
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+  color: #ffffff !important;
+  font-weight: 700;
+  box-shadow: 0 4px 8px -2px rgba(99, 102, 241, 0.45);
+  transform: scale(1.08);
+}
+
+.dp-day--selected::after {
+  display: none;
+}
+
+/* Year Picker */
+.dp-year-grid {
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  padding: 12px;
+}
+
+.dp-year-btn {
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: var(--white);
+  color: var(--dark-soft);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.dp-year-btn:hover {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: scale(1.05);
+}
+
+.dp-year-btn--selected {
+  background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+  color: white;
+  border-color: var(--primary);
+  font-weight: 700;
+  box-shadow: 0 4px 8px -2px rgba(99, 102, 241, 0.45);
+}
+
+.dp-header__decade {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--dark);
+}
+
+.dp-header__year {
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.dp-header__year:hover {
+  color: var(--primary);
+}
+
+
+/* ─── DatePicker Dark Mode ─────────────────────────────────────────── */
+[data-theme="dark"] .dp-calendar {
+  background: #1e293b;
+  border-color: #334155;
+  box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(99, 102, 241, 0.1);
+}
+
+[data-theme="dark"] .dp-day {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .dp-day:hover:not(.dp-day--empty):not(.dp-day--selected) {
+  background: rgba(129, 140, 248, 0.15);
+  color: #818cf8;
+}
+
+[data-theme="dark"] .dp-day--today {
+  color: #818cf8;
+}
+
+[data-theme="dark"] .dp-day--today::after {
+  background: #818cf8;
+}
+
+[data-theme="dark"] .dp-header__month {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .dp-nav-btn {
+  color: #e2e8f0;
+}
+
+[data-theme="dark"] .dp-nav-btn:hover {
+  background: rgba(129, 140, 248, 0.15);
+  color: #818cf8;
+  border-color: #818cf8;
+}
+
+[data-theme="dark"] .dp-footer {
+  border-top-color: #334155;
+}
+
+[data-theme="dark"] .dp-trigger__text {
+  color: #f1f5f9;
+}
+
+[data-theme="dark"] .dp-trigger__placeholder {
+  color: #64748b;
+}
+
+[data-theme="dark"] .dp-year-btn {
+  background: #334155;
+  color: #e2e8f0;
+  border-color: #475569;
+}
+
+[data-theme="dark"] .dp-year-btn:hover {
+  background: rgba(129, 140, 248, 0.15);
+  color: #818cf8;
+  border-color: #818cf8;
+}
+
+[data-theme="dark"] .dp-year-btn--selected {
+  background: linear-gradient(135deg, #818cf8, #6366f1);
+  color: #f1f5f9;
+  border-color: #818cf8;
+}
+
+[data-theme="dark"] .dp-header__decade {
+  color: #f8fafc;
+}
+
+[data-theme="dark"] .dp-header__year:hover {
+  color: #818cf8;
+}
+
+/* ─── DatePicker Responsive ────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .dp-calendar {
+    width: 280px;
+    padding: 12px;
+  }
+}
+
+@media (max-width: 360px) {
+  .dp-calendar {
+    width: 260px;
+    left: 50%;
+    transform: translateX(-50%);
   }
 }
 

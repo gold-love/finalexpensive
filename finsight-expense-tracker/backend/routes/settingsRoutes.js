@@ -24,7 +24,8 @@ const {
     getApiKeys,
     createApiKey,
     revokeApiKey,
-    restoreOrganizationData
+    restoreOrganizationData,
+    verifyAdminCredentials,
 } = require('../controllers/settingsController');
 const { getAuditLogs, getMySecurityLogs } = require('../controllers/auditController');
 
@@ -91,5 +92,8 @@ router.post('/organization/logo', protect, upload.single('logo'), (req, res) => 
     const normalizedPath = req.file.path.replace(/\\/g, '/');
     res.json({ logoUrl: `http://localhost:5000/${normalizedPath}` });
 });
+
+// Admin credential verification (any logged-in user can attempt)
+router.post('/verify-admin', protect, verifyAdminCredentials);
 
 module.exports = router;

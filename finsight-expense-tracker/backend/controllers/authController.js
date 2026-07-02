@@ -23,8 +23,11 @@ const registerUser = async (req, res) => {
     if (!email || !emailRegex.test(email)) {
         return res.status(400).json({ message: 'Please provide a valid email address' });
     }
-    if (!password || password.length < 6) {
-        return res.status(400).json({ message: 'Password must be at least 6 characters' });
+    
+    const { validatePasswordComplexity } = require('../utils/passwordValidator');
+    const pwdCheck = validatePasswordComplexity(password);
+    if (!pwdCheck.isValid) {
+        return res.status(400).json({ message: pwdCheck.message });
     }
 
     try {
@@ -410,6 +413,11 @@ const updateUserProfile = async (req, res) => {
                 const isMatch = await user.matchPassword(req.body.currentPassword);
                 if (!isMatch) {
                     return res.status(401).json({ message: 'Incorrect current password' });
+                }
+                const { validatePasswordComplexity } = require('../utils/passwordValidator');
+                const pwdCheck = validatePasswordComplexity(req.body.password);
+                if (!pwdCheck.isValid) {
+                    return res.status(400).json({ message: pwdCheck.message });
                 }
                 user.password = req.body.password;
             }

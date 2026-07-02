@@ -113,27 +113,40 @@ const createExpense = async (req, res) => {
         let finalAmount = parseFloat(amount);
         let appliedCurrency = currency || 'USD';
 
-        // 💱 Task 2: Live Currency Conversion Engine Simulation
+        // 💱 Live Currency Conversion Engine (API Integration)
         const companyBaseCurrency = req.user.preferredCurrency || 'USD';
 
         if (appliedCurrency !== companyBaseCurrency) {
-            // In a real production app, this would call: await axios.get(`https://api.exchangerate-api.com/v4/latest/${appliedCurrency}`)
-            // Here we use a static mock dictionary for demonstration:
-            const mockRatesToUSD = { 'EUR': 1.08, 'GBP': 1.25, 'CAD': 0.73, 'AUD': 0.65, 'JPY': 0.0066 };
-            const fromRate = mockRatesToUSD[appliedCurrency] || 1;
-            const toRate = mockRatesToUSD[companyBaseCurrency] || 1;
+            let conversionRate = null;
+            try {
+                const axios = require('axios');
+                // Fetch rates with base as appliedCurrency
+                const response = await axios.get(`https://open.er-api.com/v6/latest/${appliedCurrency}`, { timeout: 3000 });
+                if (response.data && response.data.rates && response.data.rates[companyBaseCurrency]) {
+                    conversionRate = response.data.rates[companyBaseCurrency];
+                }
+            } catch (apiError) {
+                console.warn('[Currency Engine] Failed to fetch live rates, falling back to mock dictionary:', apiError.message);
+            }
 
-            // Formula: (Amount * From USD Rate) / To USD Rate
-            const convertedAmount = (finalAmount * fromRate) / toRate;
+            // Fallback calculation if live API failed
+            if (conversionRate === null) {
+                const mockRatesToUSD = { 'USD': 1.0, 'EUR': 1.08, 'GBP': 1.25, 'CAD': 0.73, 'AUD': 0.65, 'JPY': 0.0066 };
+                const fromRate = mockRatesToUSD[appliedCurrency] || 1;
+                const toRate = mockRatesToUSD[companyBaseCurrency] || 1;
+                conversionRate = fromRate / toRate;
+            }
+
+            const convertedAmount = finalAmount * conversionRate;
             
             // Add a note about conversion to description
-            const conversionNote = `[Converted from ${amount} ${appliedCurrency}]`;
+            const conversionNote = `[Converted from ${amount} ${appliedCurrency} @ ${conversionRate.toFixed(4)}]`;
             description = description ? `${description}\n${conversionNote}` : conversionNote;
             
             finalAmount = convertedAmount;
             appliedCurrency = companyBaseCurrency;
 
-            console.log(`[Currency Engine] Converted ${amount} to ${finalAmount.toFixed(2)} ${companyBaseCurrency}`);
+            console.log(`[Currency Engine] Converted ${amount} to ${finalAmount.toFixed(2)} ${companyBaseCurrency} (rate: ${conversionRate})`);
         }
 
         // Check for Organization Rules
